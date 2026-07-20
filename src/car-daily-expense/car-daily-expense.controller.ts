@@ -1,0 +1,151 @@
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  ParseUUIDPipe,
+} from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiQuery,
+  ApiParam,
+} from '@nestjs/swagger';
+import { CarDailyExpenseService } from './car-daily-expense.service';
+import { CreateCarDailyExpenseDto } from './dto/create-car-daily-expense.dto';
+import { UpdateCarDailyExpenseDto } from './dto/update-car-daily-expense.dto';
+import { QueryCarDailyExpenseDto } from './dto/query-car-daily-expense.dto';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { UserRole } from '../common/enums/user-role.enum';
+import { Roles } from '../common/decorators/roles-auth-decorator';
+
+@ApiTags('Car Daily Expenses')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Controller('car-daily-expenses')
+export class CarDailyExpenseController {
+  constructor(
+    private readonly carDailyExpenseService: CarDailyExpenseService,
+  ) {}
+
+  @ApiOperation({ summary: 'Yangi kunlik xarajat yaratish' })
+  @ApiResponse({
+    status: 201,
+    description: 'Kunlik xarajat muvaffaqiyatli yaratildi',
+  })
+  @ApiResponse({ status: 409, description: 'Sana allaqachon kiritilgan' })
+  @ApiResponse({ status: 404, description: 'Mashina yoki norma topilmadi' })
+  @ApiResponse({ status: 400, description: "Odometer qiymati noto'g'ri" })
+  @ApiResponse({ status: 401, description: "Ruxsat yo'q" })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @Post()
+  create(@Body() createCarDailyExpenseDto: CreateCarDailyExpenseDto) {
+    return this.carDailyExpenseService.create(createCarDailyExpenseDto);
+  }
+
+  @ApiOperation({
+    summary: 'Barcha kunlik xarajatlarni olish (pagination va filter bilan)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Kunlik xarajatlar muvaffaqiyatli olindi',
+  })
+  @ApiResponse({ status: 401, description: "Ruxsat yo'q" })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'car_id', required: false, type: String })
+  @ApiQuery({ name: 'fuel_id', required: false, type: String })
+  @ApiQuery({ name: 'date_from', required: false, type: String })
+  @ApiQuery({ name: 'date_to', required: false, type: String })
+  @ApiQuery({ name: 'is_holiday', required: false, type: Boolean })
+  @ApiQuery({ name: 'search', required: false, type: String })
+  @ApiQuery({
+    name: 'sortBy',
+    required: false,
+    enum: ['date', 'mileage', 'fuel_expence', 'fuel_price_sum'],
+  })
+  @ApiQuery({ name: 'sortOrder', required: false, enum: ['ASC', 'DESC'] })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @Get()
+  findAll(@Query() query: QueryCarDailyExpenseDto) {
+    return this.carDailyExpenseService.findAll(query);
+  }
+
+  @ApiOperation({ summary: "ID bo'yicha kunlik xarajat olish" })
+  @ApiResponse({
+    status: 200,
+    description: 'Kunlik xarajat muvaffaqiyatli olindi',
+  })
+  @ApiResponse({ status: 404, description: 'Kunlik xarajat topilmadi' })
+  @ApiResponse({ status: 401, description: "Ruxsat yo'q" })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @Get(':id')
+  findOne(@Param('id', ParseUUIDPipe) id: string) {
+    return this.carDailyExpenseService.findOne(id);
+  }
+
+  @ApiOperation({ summary: "ID bo'yicha kunlik xarajat yangilash" })
+  @ApiResponse({
+    status: 200,
+    description: 'Kunlik xarajat muvaffaqiyatli yangilandi',
+  })
+  @ApiResponse({ status: 404, description: 'Kunlik xarajat topilmadi' })
+  @ApiResponse({
+    status: 403,
+    description: 'Faqat oxirgi yozuvni tahrirlash mumkin',
+  })
+  @ApiResponse({ status: 401, description: "Ruxsat yo'q" })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @Patch(':id')
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() updateCarDailyExpenseDto: UpdateCarDailyExpenseDto,
+  ) {
+    return this.carDailyExpenseService.update(id, updateCarDailyExpenseDto);
+  }
+
+  @ApiOperation({ summary: "ID bo'yicha kunlik xarajat o'chirish" })
+  @ApiResponse({
+    status: 200,
+    description: "Kunlik xarajat muvaffaqiyatli o'chirildi",
+  })
+  @ApiResponse({ status: 404, description: 'Kunlik xarajat topilmadi' })
+  @ApiResponse({
+    status: 403,
+    description: "Faqat oxirgi yozuvni o'chirish mumkin",
+  })
+  @ApiResponse({ status: 401, description: "Ruxsat yo'q" })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @Delete(':id')
+  remove(@Param('id', ParseUUIDPipe) id: string) {
+    return this.carDailyExpenseService.remove(id);
+  }
+
+  @ApiOperation({ summary: 'Oylik hisobot olish' })
+  @ApiResponse({
+    status: 200,
+    description: 'Oylik hisobot muvaffaqiyatli olindi',
+  })
+  @ApiResponse({ status: 404, description: 'Hisobot topilmadi' })
+  @ApiResponse({ status: 401, description: "Ruxsat yo'q" })
+  @ApiParam({ name: 'car_id', required: true, type: String })
+  @ApiParam({ name: 'fuel_id', required: true, type: String })
+  @ApiQuery({ name: 'month', required: true, type: String, example: '2024-01' })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @Get('monthly-report/:car_id/:fuel_id')
+  getMonthlyReport(
+    @Param('car_id', new ParseUUIDPipe()) car_id: string,
+    @Param('fuel_id', new ParseUUIDPipe()) fuel_id: string,
+    @Query('month') month: string,
+  ) {
+    return this.carDailyExpenseService.getMonthlyReport(car_id, fuel_id, month);
+  }
+}

@@ -1,6 +1,7 @@
 import { Column, DataType, Model, Table } from 'sequelize-typescript';
+import { EmployeeRole } from '../../common/enums/employee-role.enum';
 interface EmployeeAttr {
-  role: string;
+  role: EmployeeRole;
   full_name: string;
   phone: string;
 }
@@ -15,10 +16,10 @@ export class Employee extends Model<Employee, EmployeeAttr> {
   declare id: string;
 
   @Column({
-    type: DataType.STRING,
+    type: DataType.ENUM(...Object.values(EmployeeRole)),
     allowNull: false,
   })
-  declare role: string;
+  declare role: EmployeeRole;
 
   @Column({
     type: DataType.STRING,
