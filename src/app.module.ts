@@ -10,6 +10,15 @@ import { UserModule } from './user/user.module';
 import { User } from './user/models/user.model';
 import { CustomThrottlerGuard } from './common/guards/custom-throttler.guard';
 import { EmployeesModule } from './employees/employees.module';
+import { FuelModule } from './fuels/fuel.module';
+import { Fuel } from './fuels/models/fuels.models';
+import { CarModule } from './cars/car.module';
+import { Car } from './cars/models/cars.models';
+import { Employee } from './employees/models/employee.model';
+import { CarFuelNormModule } from './car-fuel-norm/car-fuel-norm.module';
+import { CarDailyExpenseModule } from './car-daily-expense/car-daily-expense.module';
+import { CarFuelNorm } from './car-fuel-norm/models/car-fuel-norm.model';
+import { CarDailyExpense } from './car-daily-expense/models/car-daily-expense.model';
 
 @Module({
   imports: [
@@ -35,9 +44,10 @@ import { EmployeesModule } from './employees/employees.module';
         username: config.get<string>('POSTGRES_USER'),
         password: config.get<string>('POSTGRES_PASSWORD'),
         database: config.get<string>('POSTGRES_DB'),
-        models: [User],
+        models: [User, Fuel, Car, Employee, CarFuelNorm, CarDailyExpense],
         autoLoadModels: true,
         synchronize: true,
+        sync: { alter: true },
         logging: false,
         pool: {
           max: 10,
@@ -51,6 +61,10 @@ import { EmployeesModule } from './employees/employees.module';
     AuthModule,
     UserModule,
     EmployeesModule,
+    FuelModule,
+    CarModule,
+    CarFuelNormModule,
+    CarDailyExpenseModule,
   ],
   controllers: [],
   providers: [

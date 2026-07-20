@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsString } from 'class-validator';
+import { EmployeeRole } from '../../common/enums/employee-role.enum';
 
 export class CreateEmployeeDto {
   @ApiProperty({ example: 'Aliyev Ali' })
@@ -12,8 +13,13 @@ export class CreateEmployeeDto {
   @IsNotEmpty({ message: 'Telefon raqami kiritilishi shart' })
   phone: string;
 
-  @ApiProperty({ example: 'Sotuvchi' })
-  @IsString({ message: "Lavozim (role) matn (string) bo'lishi kerak" })
-  @IsNotEmpty({ message: 'Lavozim (role) kiritilishi shart' })
-  role: string;
+  @ApiProperty({
+    enum: EmployeeRole,
+    example: EmployeeRole.DRIVER,
+    description: 'Foydalanuvchi roli',
+  })
+  @IsEnum(EmployeeRole, {
+    message: 'Role noto‘g‘ri kiritilgan',
+  })
+  role: EmployeeRole;
 }
