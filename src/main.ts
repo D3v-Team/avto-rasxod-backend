@@ -97,7 +97,7 @@ async function bootstrap(): Promise<void> {
       .setTitle('AVTO RASXOD')
       .setDescription('Avto API documentation')
       .setVersion('1.0.0')
-      .addServer(`https://167.86.110.132:${port}`, 'Production')
+      .addServer(`http://167.86.110.132:${port}`, 'Production')
       .addServer(`http://localhost:${port}`, 'Local')
       .addBearerAuth()
       .build();
