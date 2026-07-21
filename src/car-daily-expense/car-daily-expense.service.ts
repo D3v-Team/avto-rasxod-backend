@@ -15,6 +15,8 @@ import { CarFuelNorm } from '../car-fuel-norm/models/car-fuel-norm.model';
 import { CreateCarDailyExpenseDto } from './dto/create-car-daily-expense.dto';
 import { UpdateCarDailyExpenseDto } from './dto/update-car-daily-expense.dto';
 import { QueryCarDailyExpenseDto } from './dto/query-car-daily-expense.dto';
+import { CarMonthlyReportQueryDto } from './dto/car-monthly-report-query.dto';
+import { MonthlyStatisticsQueryDto } from './dto/monthly-statistics-query.dto';
 import { Car } from '../cars/models/cars.models';
 import { Fuel } from '../fuels/models/fuels.models';
 
@@ -431,15 +433,17 @@ export class CarDailyExpenseService {
 
   async getMonthlyReport(
     car_id: string,
-    fuel_id: string,
     month: string,
   ): Promise<{
-    records: CarDailyExpense[];
-    total_mileage: number;
-    total_received: number;
-    total_fuel_expence: number;
-    start_balance: number;
-    end_balance: number;
+    fuel_reports: Array<{
+      fuel_id: string;
+      fuel: Fuel;
+      total_mileage: number;
+      total_received: number;
+      total_fuel_expence: number;
+      start_balance: number;
+      end_balance: number;
+    }>;
   }> {
     try {
       const [year, monthNum] = month.split('-');
@@ -450,10 +454,12 @@ export class CarDailyExpenseService {
       const records = await this.expenseRepo.findAll({
         where: {
           car_id,
-          fuel_id,
           date: { [Op.between]: [startDate, endDate] },
         },
-        order: [['date', 'ASC']],
+        order: [
+          ['fuel_id', 'ASC'],
+          ['date', 'ASC'],
+        ],
         include: [
           {
             model: Car,
@@ -472,31 +478,58 @@ export class CarDailyExpenseService {
         );
       }
 
-      const total_mileage = records.reduce((sum, r) => sum + r.mileage, 0);
-      const total_received = records.reduce(
-        (sum, r) => sum + r.received_amount,
-        0,
-      );
-      const total_fuel_expence = records.reduce(
-        (sum, r) => sum + r.fuel_expence,
-        0,
+      const groupedByFuel = records.reduce(
+        (acc, record) => {
+          if (!acc[record.fuel_id]) {
+            acc[record.fuel_id] = {
+              fuel_id: record.fuel_id,
+              fuel: record.fuel,
+              records: [] as CarDailyExpense[],
+            };
+          }
+          acc[record.fuel_id].records.push(record);
+          return acc;
+        },
+        {} as Record<
+          string,
+          { fuel_id: string; fuel: Fuel; records: CarDailyExpense[] }
+        >,
       );
 
-      const firstRecord = records[0];
-      const start_balance =
-        firstRecord.balance_after -
-        firstRecord.received_amount +
-        firstRecord.fuel_expence;
-      const end_balance = records[records.length - 1].balance_after;
+      const fuel_reports = Object.values(groupedByFuel).map((group) => {
+        const fuelRecords = group.records;
+        const total_mileage = fuelRecords.reduce(
+          (sum, r) => sum + r.mileage,
+          0,
+        );
+        const total_received = fuelRecords.reduce(
+          (sum, r) => sum + r.received_amount,
+          0,
+        );
+        const total_fuel_expence = fuelRecords.reduce(
+          (sum, r) => sum + r.fuel_expence,
+          0,
+        );
 
-      return {
-        records,
-        total_mileage,
-        total_received,
-        total_fuel_expence,
-        start_balance,
-        end_balance,
-      };
+        const firstRecord = fuelRecords[0];
+        const start_balance =
+          firstRecord.balance_after -
+          firstRecord.received_amount +
+          firstRecord.fuel_expence;
+        const end_balance = fuelRecords[fuelRecords.length - 1].balance_after;
+
+        return {
+          fuel_id: group.fuel_id,
+          fuel: group.fuel,
+          total_mileage,
+          total_received,
+          total_fuel_expence,
+          start_balance,
+          end_balance,
+        };
+      });
+
+      return { fuel_reports };
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
@@ -504,6 +537,253 @@ export class CarDailyExpenseService {
       console.error('CarDailyExpense getMonthlyReport error:', error);
       throw new InternalServerErrorException(
         'Oylik hisobotni olishda xatolik yuz berdi',
+      );
+    }
+  }
+
+  async getCarMonthlyReport(query: CarMonthlyReportQueryDto): Promise<{
+    car: { id: string; name: string; plate_number: string };
+    month: string;
+    days: Array<{ date: string; expenses: any[] }>;
+    totals: Array<{
+      fuel_id: string;
+      fuel_name: string;
+      fuel_unit: string;
+      total_mileage: number;
+      total_received_amount: number;
+      total_fuel_expence: number;
+    }>;
+  }> {
+    try {
+      const car = await this.carRepo.findByPk(query.car_id);
+      if (!car) {
+        throw new NotFoundException('Mashina topilmadi');
+      }
+
+      const [year, monthNum] = query.month.split('-');
+      const daysInMonth = new Date(
+        parseInt(year),
+        parseInt(monthNum),
+        0,
+      ).getDate();
+      const startDate = `${query.month}-01`;
+      const endDate = `${query.month}-${daysInMonth.toString().padStart(2, '0')}`;
+
+      const where: WhereOptions = {
+        car_id: query.car_id,
+        date: { [Op.between]: [startDate, endDate] },
+      };
+
+      if (query.fuel_id) {
+        where.fuel_id = query.fuel_id;
+      }
+
+      const records = await this.expenseRepo.findAll({
+        where,
+        order: [
+          ['date', 'ASC'],
+          ['sequence_no', 'ASC'],
+        ],
+        include: [
+          {
+            model: Fuel,
+            as: 'fuel',
+          },
+        ],
+      });
+
+      const days: Array<{ date: string; expenses: any[] }> = [];
+      const expensesByDate: Record<string, any[]> = {};
+
+      records.forEach((record) => {
+        if (!expensesByDate[record.date]) {
+          expensesByDate[record.date] = [];
+        }
+        expensesByDate[record.date].push({
+          id: record.id,
+          fuel_id: record.fuel_id,
+          fuel_name: record.fuel?.name,
+          fuel_unit: record.fuel?.unit,
+          mileage: record.mileage,
+          received_amount: record.received_amount,
+          fuel_expence: record.fuel_expence,
+          balance_after: record.balance_after,
+          is_holiday: record.is_holiday,
+          note: record.note,
+        });
+      });
+
+      for (let day = 1; day <= daysInMonth; day++) {
+        const date = `${query.month}-${day.toString().padStart(2, '0')}`;
+        days.push({
+          date,
+          expenses: expensesByDate[date] || [],
+        });
+      }
+
+      const totalsByFuel: Record<
+        string,
+        {
+          fuel_id: string;
+          fuel_name: string;
+          fuel_unit: string;
+          total_mileage: number;
+          total_received_amount: number;
+          total_fuel_expence: number;
+        }
+      > = {};
+
+      records.forEach((record) => {
+        if (!totalsByFuel[record.fuel_id]) {
+          totalsByFuel[record.fuel_id] = {
+            fuel_id: record.fuel_id,
+            fuel_name: record.fuel?.name || '',
+            fuel_unit: record.fuel?.unit || '',
+            total_mileage: 0,
+            total_received_amount: 0,
+            total_fuel_expence: 0,
+          };
+        }
+        totalsByFuel[record.fuel_id].total_mileage += record.mileage;
+        totalsByFuel[record.fuel_id].total_received_amount +=
+          record.received_amount;
+        totalsByFuel[record.fuel_id].total_fuel_expence += record.fuel_expence;
+      });
+
+      const totals = Object.values(totalsByFuel);
+
+      return {
+        car: {
+          id: car.id,
+          name: car.name,
+          plate_number: car.plate_number,
+        },
+        month: query.month,
+        days,
+        totals,
+      };
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      console.error('CarDailyExpense getCarMonthlyReport error:', error);
+      throw new InternalServerErrorException(
+        'Mashina oylik hisobotini olishda xatolik yuz berdi',
+      );
+    }
+  }
+
+  async getMonthlyStatistics(query: MonthlyStatisticsQueryDto): Promise<{
+    month: string;
+    cars: Array<{
+      car: { id: string; name: string; plate_number: string };
+      fuels: Array<{
+        fuel_id: string;
+        fuel_name: string;
+        fuel_unit: string;
+        total_mileage: number;
+        total_received_amount: number;
+        total_fuel_expence: number;
+      }>;
+    }>;
+  }> {
+    try {
+      const [year, monthNum] = query.month.split('-');
+      const daysInMonth = new Date(
+        parseInt(year),
+        parseInt(monthNum),
+        0,
+      ).getDate();
+      const startDate = `${query.month}-01`;
+      const endDate = `${query.month}-${daysInMonth.toString().padStart(2, '0')}`;
+
+      const carWhere: WhereOptions = {};
+      if (query.is_active !== undefined) {
+        carWhere.is_active = query.is_active;
+      }
+      if (query.car_id) {
+        carWhere.id = query.car_id;
+      }
+
+      const cars = await this.carRepo.findAll({
+        where: carWhere,
+      });
+
+      const aggregated = await this.expenseRepo.findAll({
+        attributes: [
+          'car_id',
+          'fuel_id',
+          [
+            this.sequelize.fn('SUM', this.sequelize.col('mileage')),
+            'total_mileage',
+          ],
+          [
+            this.sequelize.fn('SUM', this.sequelize.col('received_amount')),
+            'total_received_amount',
+          ],
+          [
+            this.sequelize.fn('SUM', this.sequelize.col('fuel_expence')),
+            'total_fuel_expence',
+          ],
+        ],
+        where: {
+          date: { [Op.between]: [startDate, endDate] },
+        },
+        group: ['car_id', 'fuel_id'],
+        raw: true,
+      });
+
+      const fuels = await this.fuelRepo.findAll();
+      const fuelMap = new Map(fuels.map((f) => [f.id, f]));
+
+      const aggregatedByCar: Record<
+        string,
+        Array<{
+          fuel_id: string;
+          fuel_name: string;
+          fuel_unit: string;
+          total_mileage: number;
+          total_received_amount: number;
+          total_fuel_expence: number;
+        }>
+      > = {};
+
+      aggregated.forEach((row: any) => {
+        const carId = row.car_id as string;
+        if (!aggregatedByCar[carId]) {
+          aggregatedByCar[carId] = [];
+        }
+        const fuel = fuelMap.get(row.fuel_id as string);
+        aggregatedByCar[carId].push({
+          fuel_id: row.fuel_id as string,
+          fuel_name: fuel?.name || '',
+          fuel_unit: fuel?.unit || '',
+          total_mileage: Number(row.total_mileage) || 0,
+          total_received_amount: Number(row.total_received_amount) || 0,
+          total_fuel_expence: Number(row.total_fuel_expence) || 0,
+        });
+      });
+
+      const carsData = cars.map((car) => ({
+        car: {
+          id: car.id,
+          name: car.name,
+          plate_number: car.plate_number,
+        },
+        fuels: aggregatedByCar[car.id] || [],
+      }));
+
+      return {
+        month: query.month,
+        cars: carsData,
+      };
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      console.error('CarDailyExpense getMonthlyStatistics error:', error);
+      throw new InternalServerErrorException(
+        'Oylik statistikani olishda xatolik yuz berdi',
       );
     }
   }
