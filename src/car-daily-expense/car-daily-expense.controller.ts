@@ -22,6 +22,8 @@ import { CarDailyExpenseService } from './car-daily-expense.service';
 import { CreateCarDailyExpenseDto } from './dto/create-car-daily-expense.dto';
 import { UpdateCarDailyExpenseDto } from './dto/update-car-daily-expense.dto';
 import { QueryCarDailyExpenseDto } from './dto/query-car-daily-expense.dto';
+import { CarMonthlyReportQueryDto } from './dto/car-monthly-report-query.dto';
+import { MonthlyStatisticsQueryDto } from './dto/monthly-statistics-query.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { UserRole } from '../common/enums/user-role.enum';
@@ -70,13 +72,46 @@ export class CarDailyExpenseController {
   @ApiQuery({
     name: 'sortBy',
     required: false,
-    enum: ['date', 'mileage', 'fuel_expence', 'fuel_price_sum'],
+    enum: ['date', 'sequence_no', 'mileage', 'fuel_expence', 'balance_after'],
   })
   @ApiQuery({ name: 'sortOrder', required: false, enum: ['ASC', 'DESC'] })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
   @Get()
   findAll(@Query() query: QueryCarDailyExpenseDto) {
     return this.carDailyExpenseService.findAll(query);
+  }
+
+  @ApiOperation({ summary: 'Bitta mashinaning oylik kunlik hisoboti' })
+  @ApiResponse({
+    status: 200,
+    description: 'Mashina oylik hisoboti muvaffaqiyatli olindi',
+  })
+  @ApiResponse({ status: 404, description: 'Mashina topilmadi' })
+  @ApiResponse({ status: 400, description: "Noto'g'ri month formati" })
+  @ApiResponse({ status: 401, description: "Ruxsat yo'q" })
+  @ApiQuery({ name: 'car_id', required: true })
+  @ApiQuery({ name: 'month', required: true, example: '2026-06' })
+  @ApiQuery({ name: 'fuel_id', required: false })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @Get('car-monthly-report')
+  getCarMonthlyReport(@Query() query: CarMonthlyReportQueryDto) {
+    return this.carDailyExpenseService.getCarMonthlyReport(query);
+  }
+
+  @ApiOperation({ summary: "Barcha mashinalar bo'yicha oylik statistika" })
+  @ApiResponse({
+    status: 200,
+    description: 'Oylik statistika muvaffaqiyatli olindi',
+  })
+  @ApiResponse({ status: 400, description: "Noto'g'ri month formati" })
+  @ApiResponse({ status: 401, description: "Ruxsat yo'q" })
+  @ApiQuery({ name: 'month', required: true, example: '2026-06' })
+  @ApiQuery({ name: 'is_active', required: false })
+  @ApiQuery({ name: 'car_id', required: false })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @Get('monthly-statistics')
+  getMonthlyStatistics(@Query() query: MonthlyStatisticsQueryDto) {
+    return this.carDailyExpenseService.getMonthlyStatistics(query);
   }
 
   @ApiOperation({ summary: "ID bo'yicha kunlik xarajat olish" })
@@ -129,7 +164,9 @@ export class CarDailyExpenseController {
     return this.carDailyExpenseService.remove(id);
   }
 
-  @ApiOperation({ summary: 'Oylik hisobot olish' })
+  @ApiOperation({
+    summary: "Oylik hisobot olish (har bir yoqilg'i turi bo'yicha)",
+  })
   @ApiResponse({
     status: 200,
     description: 'Oylik hisobot muvaffaqiyatli olindi',
@@ -137,15 +174,13 @@ export class CarDailyExpenseController {
   @ApiResponse({ status: 404, description: 'Hisobot topilmadi' })
   @ApiResponse({ status: 401, description: "Ruxsat yo'q" })
   @ApiParam({ name: 'car_id', required: true, type: String })
-  @ApiParam({ name: 'fuel_id', required: true, type: String })
   @ApiQuery({ name: 'month', required: true, type: String, example: '2024-01' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
-  @Get('monthly-report/:car_id/:fuel_id')
+  @Get('monthly-report/:car_id')
   getMonthlyReport(
     @Param('car_id', new ParseUUIDPipe()) car_id: string,
-    @Param('fuel_id', new ParseUUIDPipe()) fuel_id: string,
     @Query('month') month: string,
   ) {
-    return this.carDailyExpenseService.getMonthlyReport(car_id, fuel_id, month);
+    return this.carDailyExpenseService.getMonthlyReport(car_id, month);
   }
 }
