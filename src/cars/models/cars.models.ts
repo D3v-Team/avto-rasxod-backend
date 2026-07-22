@@ -3,10 +3,12 @@ import {
   Column,
   DataType,
   ForeignKey,
+  HasMany,
   Model,
   Table,
 } from 'sequelize-typescript';
 import { Employee } from '../../employees/models/employee.model';
+import { CarFuelNorm } from '../../car-fuel-norm/models/car-fuel-norm.model';
 
 interface CarAttr {
   name: string;
@@ -16,9 +18,31 @@ interface CarAttr {
   speedometer: number;
   last_sequence_no: number;
   is_active?: boolean;
+  is_deleted?: boolean;
 }
 
-@Table({ tableName: 'cars' })
+@Table({
+  tableName: 'cars',
+  defaultScope: {
+    where: { is_deleted: false },
+  },
+  scopes: {
+    withDeleted: {
+      where: {},
+    },
+    onlyDeleted: {
+      where: { is_deleted: true },
+    },
+  },
+  indexes: [
+    {
+      unique: true,
+      fields: ['plate_number'],
+      where: { is_deleted: false },
+      name: 'uq_cars_plate_number_active',
+    },
+  ],
+})
 export class Car extends Model<Car, CarAttr> {
   @Column({
     type: DataType.UUID,
@@ -36,7 +60,6 @@ export class Car extends Model<Car, CarAttr> {
   @Column({
     type: DataType.STRING,
     allowNull: false,
-    unique: true,
   })
   declare plate_number: string;
 
@@ -66,6 +89,9 @@ export class Car extends Model<Car, CarAttr> {
   })
   declare driver?: Employee;
 
+  @HasMany(() => CarFuelNorm, { as: 'car_fuel_norm' })
+  declare car_fuel_norm: CarFuelNorm[];
+
   @Column({
     type: DataType.FLOAT,
     allowNull: false,
@@ -86,4 +112,11 @@ export class Car extends Model<Car, CarAttr> {
     defaultValue: true,
   })
   declare is_active: boolean;
+
+  @Column({
+    type: DataType.BOOLEAN,
+    allowNull: false,
+    defaultValue: false,
+  })
+  declare is_deleted: boolean;
 }

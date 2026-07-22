@@ -14,6 +14,7 @@ import { User } from './models/user.model';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ResetPasswordDto } from './dto/resetPassword.dto';
+import { QueryUserDto } from './dto/query-user.dto';
 import { UserRole } from '../common/enums/user-role.enum';
 
 const BCRYPT_ROUNDS = 10;
@@ -89,8 +90,11 @@ export class UserService implements OnModuleInit {
     return user;
   }
 
-  async getPaginatedUsers(page: number) {
-    return this.paginateByRole(page, { role: UserRole.ADMIN });
+  async getPaginatedUsers(is_deleted: boolean, page: number) {
+    return this.paginateByRole(page, {
+      role: UserRole.ADMIN,
+      is_deleted,
+    });
   }
 
   async updateUser(id: string, dto: UpdateUserDto) {
@@ -123,9 +127,50 @@ export class UserService implements OnModuleInit {
 
   async deleteUser(id: string) {
     const user = await this.getUserById(id);
-    await user.destroy();
+    await user.update({ is_deleted: true });
 
-    return { message: "Admin muvaffaqiyatli o'chirildi" };
+    return { message: "Admin arxivlandi (o'chirildi)" };
+  }
+
+  async restoreUser(id: string): Promise<{ message: string }> {
+    try {
+      const user = await this.userRepo.scope('onlyDeleted').findByPk(id);
+      if (!user) {
+        throw new NotFoundException(
+          `ID ${id} bo'yicha arxivlangan admin topilmadi`,
+        );
+      }
+      await user.update({ is_deleted: false });
+      return { message: 'Admin tiklandi' };
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      console.error('Restore user error:', error);
+      throw new InternalServerErrorException('Tiklashda xatolik yuz berdi');
+    }
+  }
+
+  async findAll(query: QueryUserDto) {
+    try {
+      const { is_deleted } = query;
+
+      let scope: string | undefined = undefined;
+      if (is_deleted === true) {
+        scope = 'onlyDeleted';
+      }
+
+      const repo = scope ? this.userRepo.scope(scope) : this.userRepo;
+
+      const records = await repo.findAll({
+        where: { role: UserRole.ADMIN },
+      });
+
+      return { data: records };
+    } catch (error) {
+      console.error('FindAll users error:', error);
+      throw new InternalServerErrorException(
+        'Foydalanuvchilarni olishda xatolik yuz berdi',
+      );
+    }
   }
 
   private async paginateByRole(page: number, where: WhereOptions) {

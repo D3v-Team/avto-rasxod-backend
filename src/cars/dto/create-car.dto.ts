@@ -7,6 +7,7 @@ import {
   Min,
   IsBoolean,
   Length,
+  IsOptional,
 } from 'class-validator';
 
 export class CreateCarDto {
@@ -37,16 +38,16 @@ export class CreateCarDto {
     example: 'uuid',
   })
   @IsUUID()
-  @IsNotEmpty()
-  responsible_employee_id: string;
+  @IsOptional()
+  responsible_employee_id?: string;
 
   @ApiProperty({
     description: 'Driver employee ID',
     example: 'uuid',
   })
   @IsUUID()
-  @IsNotEmpty()
-  driver_id: string;
+  @IsOptional()
+  driver_id?: string;
 
   @ApiProperty({
     description: 'Speedometer value',

@@ -14,14 +14,28 @@ interface CarFuelNormAttr {
   fuel_id: string;
   norm_per_100km: number;
   current_balance: number;
+  is_deleted?: boolean;
 }
 
 @Table({
   tableName: 'car_fuel_norms',
+  defaultScope: {
+    where: { is_deleted: false },
+  },
+  scopes: {
+    withDeleted: {
+      where: {},
+    },
+    onlyDeleted: {
+      where: { is_deleted: true },
+    },
+  },
   indexes: [
     {
       unique: true,
       fields: ['car_id', 'fuel_id'],
+      where: { is_deleted: false },
+      name: 'uq_car_fuel_norm_active',
     },
   ],
 })
@@ -65,4 +79,11 @@ export class CarFuelNorm extends Model<CarFuelNorm, CarFuelNormAttr> {
     defaultValue: 0,
   })
   declare current_balance: number;
+
+  @Column({
+    type: DataType.BOOLEAN,
+    allowNull: false,
+    defaultValue: false,
+  })
+  declare is_deleted: boolean;
 }

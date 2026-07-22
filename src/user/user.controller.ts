@@ -12,17 +12,13 @@ import {
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import {
-  ApiBearerAuth,
-  ApiOperation,
-  ApiQuery,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Roles } from '../common/decorators/roles-auth-decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { ResetPasswordDto } from './dto/resetPassword.dto';
 import { UserRole } from '../common/enums/user-role.enum';
+import { QueryIs_deleteDto } from '../employees/dto/query-employee.dto';
 
 @ApiTags('Users')
 @ApiBearerAuth()
@@ -47,10 +43,9 @@ export class UserController {
 
   @ApiOperation({ summary: 'Adminlarni sahifalab (pagination) olish' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
-  @ApiQuery({ name: 'page', required: false })
   @Get('page')
-  getPaginatedUsers(@Query('page') page: number) {
-    return this.userService.getPaginatedUsers(page);
+  getPaginatedUsers(@Query() query: QueryIs_deleteDto) {
+    return this.userService.getPaginatedUsers(query.is_deleted, query.page);
   }
 
   @ApiOperation({ summary: 'ID boyicha adminni olish' })

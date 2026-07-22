@@ -46,15 +46,17 @@ export class QueryCarDto {
   @IsString()
   search?: string;
 
-  @ApiProperty({ description: 'Avtomobil holati' })
   @IsOptional()
   @Transform(({ value }) => {
-    if (value === 'true') return true;
-    if (value === 'false') return false;
-    return true;
+    if (value === undefined || value === null || value === '') {
+      return undefined;
+    }
+    if (value === 'true' || value === true) return true;
+    if (value === 'false' || value === false) return false;
+    return value;
   })
   @IsBoolean()
-  @ApiProperty({ required: false, type: Boolean })
+  @ApiProperty({ required: false })
   is_active?: boolean;
 
   @ApiProperty({
@@ -98,4 +100,17 @@ export class QueryCarDto {
   @IsString()
   @IsIn(['ASC', 'DESC'])
   sortOrder?: 'ASC' | 'DESC' = 'DESC';
+
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === undefined || value === null || value === '') {
+      return undefined;
+    }
+    if (value === 'true' || value === true) return true;
+    if (value === 'false' || value === false) return false;
+    return value;
+  })
+  @IsBoolean()
+  @ApiProperty({ required: false })
+  is_deleted?: boolean;
 }

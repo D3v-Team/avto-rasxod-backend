@@ -6,10 +6,11 @@ import {
   HttpException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
-import { Op, WhereOptions } from 'sequelize';
+import { IncludeOptions, Op, WhereOptions } from 'sequelize';
 import { CarFuelNorm } from './models/car-fuel-norm.model';
 import { Car } from '../cars/models/cars.models';
 import { Fuel } from '../fuels/models/fuels.models';
+import { CarDailyExpense } from '../car-daily-expense/models/car-daily-expense.model';
 import { CreateCarFuelNormDto } from './dto/create-car-fuel-norm.dto';
 import { UpdateCarFuelNormDto } from './dto/update-car-fuel-norm.dto';
 import { QueryCarFuelNormDto } from './dto/query-car-fuel-norm.dto';
@@ -21,6 +22,8 @@ export class CarFuelNormService {
     private readonly carFuelNormRepo: typeof CarFuelNorm,
     @InjectModel(Car) private readonly carRepo: typeof Car,
     @InjectModel(Fuel) private readonly fuelRepo: typeof Fuel,
+    @InjectModel(CarDailyExpense)
+    private readonly carDailyExpenseRepo: typeof CarDailyExpense,
   ) {}
 
   async create(dto: CreateCarFuelNormDto): Promise<CarFuelNorm> {
@@ -66,7 +69,16 @@ export class CarFuelNormService {
     totalPages: number;
   }> {
     try {
-      const { page, limit, car_id, fuel_id, search, sortBy, sortOrder } = query;
+      const {
+        page,
+        limit,
+        car_id,
+        fuel_id,
+        search,
+        sortBy,
+        sortOrder,
+        is_deleted,
+      } = query;
       const offset = (page - 1) * limit;
 
       const where: WhereOptions = {};
@@ -79,7 +91,7 @@ export class CarFuelNormService {
         where.fuel_id = fuel_id;
       }
 
-      const include: any[] = [
+      const include: IncludeOptions[] = [
         {
           model: Car,
           as: 'car',
@@ -92,11 +104,11 @@ export class CarFuelNormService {
 
       if (search) {
         include[0].where = {
-          $or: [
+          [Op.or]: [
             { name: { [Op.iLike]: `%${search}%` } },
             { plate_number: { [Op.iLike]: `%${search}%` } },
           ],
-        } as any;
+        };
       }
 
       const order: [string, string][] = [];
@@ -104,15 +116,24 @@ export class CarFuelNormService {
         order.push([sortBy, sortOrder]);
       }
 
+      let scope: string | undefined = undefined;
+      if (is_deleted === true) {
+        scope = 'onlyDeleted';
+      }
+
+      const repo = scope
+        ? this.carFuelNormRepo.scope(scope)
+        : this.carFuelNormRepo;
+
       const [data, total] = await Promise.all([
-        this.carFuelNormRepo.findAll({
+        repo.findAll({
           where,
           offset,
           limit,
           order,
           include,
         }),
-        this.carFuelNormRepo.count({ where }),
+        repo.count({ where }),
       ]);
 
       const totalPages = Math.ceil(total / limit);
@@ -189,11 +210,23 @@ export class CarFuelNormService {
 
   async remove(id: string): Promise<{ message: string }> {
     try {
-      const carFuelNorm = await this.findOne(id);
+      const record = await this.findOne(id);
 
-      await carFuelNorm.destroy();
+      const relatedExpensesCount = await this.carDailyExpenseRepo.count({
+        where: { car_id: record.car_id, fuel_id: record.fuel_id },
+      });
 
-      return { message: "Norma muvaffaqiyatli o'chirildi" };
+      if (relatedExpensesCount > 0) {
+        throw new ConflictException(
+          "Bu norma bo'yicha rasxod tarixi mavjud, shuning uchun " +
+            "o'chirib (arxivlab) bo'lmaydi. Avval mashinani boshqa " +
+            "yoqilg'i normasiga o'tkazing yoki tarixiy yozuvlarni " +
+            "ko'rib chiqing.",
+        );
+      }
+
+      await record.update({ is_deleted: true });
+      return { message: "Yoqilg'i normasi arxivlandi" };
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
@@ -202,6 +235,25 @@ export class CarFuelNormService {
       throw new InternalServerErrorException(
         "Normani o'chirishda xatolik yuz berdi",
       );
+    }
+  }
+
+  async restore(id: string): Promise<{ message: string }> {
+    try {
+      const carFuelNorm = await this.carFuelNormRepo
+        .scope('onlyDeleted')
+        .findByPk(id);
+      if (!carFuelNorm) {
+        throw new NotFoundException(
+          `ID ${id} bo'yicha arxivlangan norma topilmadi`,
+        );
+      }
+      await carFuelNorm.update({ is_deleted: false });
+      return { message: 'Norma tiklandi' };
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      console.error('Restore carFuelNorm error:', error);
+      throw new InternalServerErrorException('Tiklashda xatolik yuz berdi');
     }
   }
 }

@@ -5,10 +5,11 @@ import {
   IsNumber,
   IsUUID,
   IsIn,
+  IsBoolean,
   Min,
   Max,
 } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 
 export class QueryCarFuelNormDto {
   @ApiProperty({
@@ -86,4 +87,23 @@ export class QueryCarFuelNormDto {
   @IsString()
   @IsIn(['ASC', 'DESC'])
   sortOrder?: 'ASC' | 'DESC' = 'DESC';
+
+  @ApiProperty({
+    required: false,
+    description:
+      "true — faqat o'chirilgan yozuvlarni ko'rsatadi, false — faqat " +
+      "aktiv (o'chirilmagan) yozuvlarni ko'rsatadi (DEFAULT), " +
+      'berilmasa faqat aktiv yozuvlar qaytadi',
+  })
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (value === undefined || value === null || value === '') {
+      return undefined;
+    }
+    if (value === 'true' || value === true) return true;
+    if (value === 'false' || value === false) return false;
+    return value;
+  })
+  @IsBoolean()
+  is_deleted?: boolean;
 }

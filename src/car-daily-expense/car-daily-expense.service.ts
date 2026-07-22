@@ -8,7 +8,7 @@ import {
   HttpException,
 } from '@nestjs/common';
 import { InjectModel, InjectConnection } from '@nestjs/sequelize';
-import { Op, WhereOptions } from 'sequelize';
+import { IncludeOptions, Op, WhereOptions } from 'sequelize';
 import { Sequelize } from 'sequelize';
 import { CarDailyExpense } from './models/car-daily-expense.model';
 import { CarFuelNorm } from '../car-fuel-norm/models/car-fuel-norm.model';
@@ -166,7 +166,7 @@ export class CarDailyExpenseService {
         where.is_holiday = is_holiday;
       }
 
-      const include: any[] = [
+      const include: IncludeOptions[] = [
         {
           model: Car,
           as: 'car',
@@ -179,11 +179,11 @@ export class CarDailyExpenseService {
 
       if (search) {
         include[0].where = {
-          $or: [
+          [Op.or]: [
             { name: { [Op.iLike]: `%${search}%` } },
             { plate_number: { [Op.iLike]: `%${search}%` } },
           ],
-        } as any;
+        };
       }
 
       const order: [string, string][] = [];
@@ -307,9 +307,9 @@ export class CarDailyExpenseService {
           where: {
             car_id: record.car_id,
             fuel_id: record.fuel_id,
-            date: { [Op.lt]: record.date },
+            sequence_no: { [Op.lt]: record.sequence_no },
           },
-          order: [['date', 'DESC']],
+          order: [['sequence_no', 'DESC']],
           transaction: t,
         });
         const previousBalance = previousRecord
@@ -390,9 +390,9 @@ export class CarDailyExpenseService {
           where: {
             car_id: record.car_id,
             fuel_id: record.fuel_id,
-            date: { [Op.lt]: record.date },
+            sequence_no: { [Op.lt]: record.sequence_no },
           },
-          order: [['date', 'DESC']],
+          order: [['sequence_no', 'DESC']],
           transaction: t,
         });
         const previousBalance = previousRecord
@@ -709,7 +709,7 @@ export class CarDailyExpenseService {
         where: carWhere,
       });
 
-      const aggregated = await this.expenseRepo.findAll({
+      const aggregated = (await this.expenseRepo.findAll({
         attributes: [
           'car_id',
           'fuel_id',
@@ -731,7 +731,7 @@ export class CarDailyExpenseService {
         },
         group: ['car_id', 'fuel_id'],
         raw: true,
-      });
+      })) as any[];
 
       const fuels = await this.fuelRepo.findAll();
       const fuelMap = new Map(fuels.map((f) => [f.id, f]));
@@ -748,21 +748,29 @@ export class CarDailyExpenseService {
         }>
       > = {};
 
-      aggregated.forEach((row: any) => {
-        const carId = row.car_id as string;
-        if (!aggregatedByCar[carId]) {
-          aggregatedByCar[carId] = [];
-        }
-        const fuel = fuelMap.get(row.fuel_id as string);
-        aggregatedByCar[carId].push({
-          fuel_id: row.fuel_id as string,
-          fuel_name: fuel?.name || '',
-          fuel_unit: fuel?.unit || '',
-          total_mileage: Number(row.total_mileage) || 0,
-          total_received_amount: Number(row.total_received_amount) || 0,
-          total_fuel_expence: Number(row.total_fuel_expence) || 0,
-        });
-      });
+      aggregated.forEach(
+        (row: {
+          car_id: string;
+          fuel_id: string;
+          total_mileage: string;
+          total_received_amount: string;
+          total_fuel_expence: string;
+        }) => {
+          const carId = row.car_id;
+          if (!aggregatedByCar[carId]) {
+            aggregatedByCar[carId] = [];
+          }
+          const fuel = fuelMap.get(row.fuel_id);
+          aggregatedByCar[carId].push({
+            fuel_id: row.fuel_id,
+            fuel_name: fuel?.name || '',
+            fuel_unit: fuel?.unit || '',
+            total_mileage: Number(row.total_mileage) || 0,
+            total_received_amount: Number(row.total_received_amount) || 0,
+            total_fuel_expence: Number(row.total_fuel_expence) || 0,
+          });
+        },
+      );
 
       const carsData = cars.map((car) => ({
         car: {

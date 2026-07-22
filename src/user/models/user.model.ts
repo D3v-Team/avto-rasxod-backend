@@ -8,9 +8,31 @@ interface UserAttr {
   hashed_refresh_token?: string | null;
   refresh_token_jti?: string | null;
   role: UserRole;
+  is_deleted?: boolean;
 }
 
-@Table({ tableName: 'users' })
+@Table({
+  tableName: 'users',
+  defaultScope: {
+    where: { is_deleted: false },
+  },
+  scopes: {
+    withDeleted: {
+      where: {},
+    },
+    onlyDeleted: {
+      where: { is_deleted: true },
+    },
+  },
+  indexes: [
+    {
+      unique: true,
+      fields: ['username'],
+      where: { is_deleted: false },
+      name: 'uq_users_username_active',
+    },
+  ],
+})
 export class User extends Model<User, UserAttr> {
   @Column({
     type: DataType.UUID,
@@ -28,7 +50,6 @@ export class User extends Model<User, UserAttr> {
   @Column({
     type: DataType.STRING,
     allowNull: false,
-    unique: true,
   })
   declare username: string;
 
@@ -55,4 +76,11 @@ export class User extends Model<User, UserAttr> {
     allowNull: false,
   })
   declare role: UserRole;
+
+  @Column({
+    type: DataType.BOOLEAN,
+    allowNull: false,
+    defaultValue: false,
+  })
+  declare is_deleted: boolean;
 }
