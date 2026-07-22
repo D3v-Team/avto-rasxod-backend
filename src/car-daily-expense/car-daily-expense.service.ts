@@ -8,7 +8,7 @@ import {
   HttpException,
 } from '@nestjs/common';
 import { InjectModel, InjectConnection } from '@nestjs/sequelize';
-import { IncludeOptions, Op, WhereOptions } from 'sequelize';
+import { IncludeOptions, Op, WhereOptions, fn, col, literal } from 'sequelize';
 import { Sequelize } from 'sequelize';
 import { CarDailyExpense } from './models/car-daily-expense.model';
 import { CarFuelNorm } from '../car-fuel-norm/models/car-fuel-norm.model';
@@ -17,6 +17,7 @@ import { UpdateCarDailyExpenseDto } from './dto/update-car-daily-expense.dto';
 import { QueryCarDailyExpenseDto } from './dto/query-car-daily-expense.dto';
 import { CarMonthlyReportQueryDto } from './dto/car-monthly-report-query.dto';
 import { MonthlyStatisticsQueryDto } from './dto/monthly-statistics-query.dto';
+import { YearlyStatisticsQueryDto } from './dto/yearly-statistics-query.dto';
 import { Car } from '../cars/models/cars.models';
 import { Fuel } from '../fuels/models/fuels.models';
 
@@ -792,6 +793,122 @@ export class CarDailyExpenseService {
       console.error('CarDailyExpense getMonthlyStatistics error:', error);
       throw new InternalServerErrorException(
         'Oylik statistikani olishda xatolik yuz berdi',
+      );
+    }
+  }
+
+  async getYearlyStatistics(query: YearlyStatisticsQueryDto) {
+    try {
+      const { year, car_id, is_active } = query;
+      const date_from = `${year}-01-01`;
+      const date_to = `${year}-12-31`;
+
+      const carWhere: any = {};
+      if (car_id) carWhere.id = car_id;
+      if (is_active !== undefined) carWhere.is_active = is_active;
+
+      const cars = await this.carRepo.findAll({
+        where: carWhere,
+        attributes: ['id', 'name', 'plate_number'],
+      });
+
+      const fuels = await this.fuelRepo.findAll();
+
+      const expenses = await this.expenseRepo.findAll({
+        where: {
+          ...(car_id ? { car_id } : {}),
+          date: { [Op.between]: [date_from, date_to] },
+        },
+        attributes: [
+          'car_id',
+          'fuel_id',
+          [fn('EXTRACT', literal('MONTH FROM "date"')), 'month'],
+          [fn('SUM', col('mileage')), 'total_mileage'],
+          [fn('SUM', col('received_amount')), 'total_received_amount'],
+          [fn('SUM', col('fuel_expence')), 'total_fuel_expence'],
+        ],
+        group: ['car_id', 'fuel_id', literal('EXTRACT(MONTH FROM "date")') as any],
+        raw: true,
+      }) as any[];
+
+      const expensesMap = new Map<string, any[]>();
+      for (const e of expenses) {
+        const key = `${e.car_id}_${e.fuel_id}`;
+        if (!expensesMap.has(key)) expensesMap.set(key, []);
+        expensesMap.get(key)!.push(e);
+      }
+
+      const carsResult = cars.map((car) => {
+        const carFuelsResult: any[] = [];
+
+        for (const fuel of fuels) {
+          const key = `${car.id}_${fuel.id}`;
+          const fuelExpenses = expensesMap.get(key) || [];
+
+          if (fuelExpenses.length === 0) {
+            continue;
+          }
+
+          let yearly_total_mileage = 0;
+          let yearly_total_received = 0;
+          let yearly_total_expence = 0;
+
+          const monthly_breakdown = Array.from({ length: 12 }, (_, i) => {
+            const monthNum = i + 1;
+            const monthRecord = fuelExpenses.find(
+              (r) => Number(r.month) === monthNum,
+            );
+
+            const m_mileage = monthRecord ? Number(monthRecord.total_mileage) : 0;
+            const m_received = monthRecord ? Number(monthRecord.total_received_amount) : 0;
+            const m_expence = monthRecord ? Number(monthRecord.total_fuel_expence) : 0;
+
+            yearly_total_mileage += m_mileage;
+            yearly_total_received += m_received;
+            yearly_total_expence += m_expence;
+
+            return {
+              month: monthNum,
+              total_mileage: m_mileage,
+              total_received_amount: m_received,
+              total_fuel_expence: m_expence,
+            };
+          });
+
+          carFuelsResult.push({
+            fuel_id: fuel.id,
+            fuel_name: fuel.name,
+            fuel_unit: fuel.unit,
+            yearly_total: {
+              total_mileage: yearly_total_mileage,
+              total_received_amount: yearly_total_received,
+              total_fuel_expence: yearly_total_expence,
+            },
+            monthly_breakdown,
+          });
+        }
+
+        return {
+          car: {
+            id: car.id,
+            name: car.name,
+            plate_number: car.plate_number,
+          },
+          fuels: carFuelsResult,
+        };
+      });
+
+      return {
+        year,
+        cars: carsResult,
+      };
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      console.error('getYearlyStatistics error:', error);
+      throw new InternalServerErrorException(
+        'Yillik statistikani olishda xatolik yuz berdi',
       );
     }
   }

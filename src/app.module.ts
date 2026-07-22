@@ -48,7 +48,7 @@ import { CarDailyExpense } from './car-daily-expense/models/car-daily-expense.mo
         autoLoadModels: true,
         synchronize: true,
         sync: { alter: true },
-        logging: false,
+        logging: true,
         pool: {
           max: 10,
           min: 2,

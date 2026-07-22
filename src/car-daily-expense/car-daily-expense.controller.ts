@@ -24,6 +24,7 @@ import { UpdateCarDailyExpenseDto } from './dto/update-car-daily-expense.dto';
 import { QueryCarDailyExpenseDto } from './dto/query-car-daily-expense.dto';
 import { CarMonthlyReportQueryDto } from './dto/car-monthly-report-query.dto';
 import { MonthlyStatisticsQueryDto } from './dto/monthly-statistics-query.dto';
+import { YearlyStatisticsQueryDto } from './dto/yearly-statistics-query.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { UserRole } from '../common/enums/user-role.enum';
@@ -84,6 +85,16 @@ export class CarDailyExpenseController {
   @Get('monthly-statistics')
   getMonthlyStatistics(@Query() query: MonthlyStatisticsQueryDto) {
     return this.carDailyExpenseService.getMonthlyStatistics(query);
+  }
+
+  @Get('yearly-statistics')
+  @ApiOperation({ summary: "Barcha mashinalar bo'yicha yillik statistika" })
+  @ApiQuery({ name: 'year', required: true, example: 2026 })
+  @ApiQuery({ name: 'car_id', required: false })
+  @ApiQuery({ name: 'is_active', required: false })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  findYearlyStatistics(@Query() query: YearlyStatisticsQueryDto) {
+    return this.carDailyExpenseService.getYearlyStatistics(query);
   }
 
   @ApiOperation({

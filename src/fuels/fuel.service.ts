@@ -158,10 +158,16 @@ export class FuelService {
       const fuel = await this.findOne(id);
       await fuel.destroy();
       return { message: "Fuel muvaffaqiyatli o'chirildi" };
-    } catch (error) {
+    } catch (error: any) {
       if (error instanceof HttpException) {
         throw error;
       }
+      if (error.name === 'SequelizeForeignKeyConstraintError') {
+        throw new ConflictException(
+          "Bu yoqilg'i turidan boshqa joylarda (norma yoki rasxodlarda) foydalanilganligi sababli uni o'chirib bo'lmaydi.",
+        );
+      }
+      console.error('Fuel delete error:', error);
       throw new InternalServerErrorException(
         "Fuel ni o'chirishda xatolik yuz berdi",
       );
