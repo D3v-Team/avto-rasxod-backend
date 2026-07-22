@@ -90,7 +90,8 @@ export class UserService implements OnModuleInit {
     return user;
   }
 
-  async getPaginatedUsers(is_deleted: boolean, page: number) {
+  async getPaginatedUsers(isDeleted: boolean, page: number) {
+    const is_deleted = isDeleted ?? false;
     return this.paginateByRole(page, {
       role: UserRole.ADMIN,
       is_deleted,
