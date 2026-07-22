@@ -18,6 +18,7 @@ import {
 import { EmployeesService } from './employees.service';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
+import { QueryIs_deleteDto } from './dto/query-employee.dto';
 import { Roles } from '../common/decorators/roles-auth-decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -41,8 +42,8 @@ export class EmployeesController {
   @ApiOperation({ summary: 'Barcha xodimlarni olish' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
   @Get()
-  findAll() {
-    return this.employeesService.findAll();
+  findAll(@Query() query: QueryIs_deleteDto) {
+    return this.employeesService.findAll(query);
   }
 
   @ApiOperation({ summary: 'Xodimlarni filterlab olish' })
@@ -53,16 +54,14 @@ export class EmployeesController {
   })
   @ApiQuery({ name: 'searchTerm', required: false })
   @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'limit', required: false, type: Number })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
   @Get('filter')
   filter(
     @Query('role') role: EmployeeRole,
     @Query('searchTerm') searchTerm: string,
     @Query('page') page: number,
-    @Query('limit') limit: number,
   ) {
-    return this.employeesService.filter({ role, searchTerm, page, limit });
+    return this.employeesService.filter({ role, searchTerm, page });
   }
 
   @ApiOperation({ summary: 'ID boyicha xodimni olish' })

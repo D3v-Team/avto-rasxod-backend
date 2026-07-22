@@ -4,9 +4,23 @@ interface EmployeeAttr {
   role: EmployeeRole;
   full_name: string;
   phone: string;
+  is_deleted?: boolean;
 }
 
-@Table({ tableName: 'employees' })
+@Table({
+  tableName: 'employees',
+  defaultScope: {
+    where: { is_deleted: false },
+  },
+  scopes: {
+    withDeleted: {
+      where: {},
+    },
+    onlyDeleted: {
+      where: { is_deleted: true },
+    },
+  },
+})
 export class Employee extends Model<Employee, EmployeeAttr> {
   @Column({
     type: DataType.UUID,
@@ -32,4 +46,11 @@ export class Employee extends Model<Employee, EmployeeAttr> {
     allowNull: false,
   })
   declare phone: string;
+
+  @Column({
+    type: DataType.BOOLEAN,
+    allowNull: false,
+    defaultValue: false,
+  })
+  declare is_deleted: boolean;
 }
