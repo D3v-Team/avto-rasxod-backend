@@ -25,6 +25,7 @@ import { QueryCarDailyExpenseDto } from './dto/query-car-daily-expense.dto';
 import { CarMonthlyReportQueryDto } from './dto/car-monthly-report-query.dto';
 import { MonthlyStatisticsQueryDto } from './dto/monthly-statistics-query.dto';
 import { YearlyStatisticsQueryDto } from './dto/yearly-statistics-query.dto';
+import { OrganizationMonthlyReportQueryDto } from './dto/organization-monthly-report-query.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { UserRole } from '../common/enums/user-role.enum';
@@ -98,7 +99,7 @@ export class CarDailyExpenseController {
   }
 
   @Get('all-employees-and-cars-counts')
-  @ApiOperation({ summary: "Barcha xodimlar va mashinalar soni" })
+  @ApiOperation({ summary: 'Barcha xodimlar va mashinalar soni' })
   @ApiResponse({
     status: 200,
     description: 'Barcha xodimlar va mashinalar soni muvaffaqiyatli olindi',
@@ -107,6 +108,29 @@ export class CarDailyExpenseController {
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
   async allEmployesAndCarsCount() {
     return this.carDailyExpenseService.allEmployesAndCarsCount();
+  }
+
+  @ApiOperation({
+    summary: "Tashkilot bo'yicha oylik yoqilg'i hisoboti (barcha mashinalar)",
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Tashkilot oylik hisoboti muvaffaqiyatli olindi',
+  })
+  @ApiResponse({ status: 400, description: "Noto'g'ri yil yoki oy" })
+  @ApiResponse({ status: 401, description: "Ruxsat yo'q" })
+  @ApiQuery({ name: 'year', required: true, example: 2026 })
+  @ApiQuery({ name: 'month', required: true, example: 6 })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiQuery({ name: 'is_active', required: false, type: Boolean })
+  @ApiQuery({ name: 'search', required: false, type: String })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @Get('organization-monthly-report')
+  getOrganizationMonthlyReport(
+    @Query() query: OrganizationMonthlyReportQueryDto,
+  ) {
+    return this.carDailyExpenseService.getOrganizationMonthlyReport(query);
   }
 
   @ApiOperation({

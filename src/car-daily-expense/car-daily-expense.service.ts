@@ -18,6 +18,7 @@ import { QueryCarDailyExpenseDto } from './dto/query-car-daily-expense.dto';
 import { CarMonthlyReportQueryDto } from './dto/car-monthly-report-query.dto';
 import { MonthlyStatisticsQueryDto } from './dto/monthly-statistics-query.dto';
 import { YearlyStatisticsQueryDto } from './dto/yearly-statistics-query.dto';
+import { OrganizationMonthlyReportQueryDto } from './dto/organization-monthly-report-query.dto';
 import { Car } from '../cars/models/cars.models';
 import { Fuel } from '../fuels/models/fuels.models';
 import { Employee } from '../employees/models/employee.model';
@@ -149,6 +150,7 @@ export class CarDailyExpenseService {
       total_fuel_expence: number;
       total_mileage: number;
       total_price_sum: number;
+      current_balance: number;
     }[];
   }> {
     try {
@@ -224,7 +226,7 @@ export class CarDailyExpenseService {
 
       const normalizedSearch = search ? normalizeName(search) : '';
 
-      const [data, total, totalsRaw] = await Promise.all([
+      const [data, total, totalsRaw, fuelNormsRaw] = await Promise.all([
         this.expenseRepo.findAll({
           where,
           offset,
@@ -234,6 +236,7 @@ export class CarDailyExpenseService {
           subQuery: false,
         }),
         this.expenseRepo.count({ where, include, distinct: true }),
+        // Filtrlarga mos BARCHA yozuvlar bo'yicha, fuel_id kesimida jami
         this.expenseRepo.findAll({
           where,
           include: [
@@ -245,19 +248,19 @@ export class CarDailyExpenseService {
             },
             ...(search
               ? [
-                {
-                  model: Car,
-                  as: 'car',
-                  attributes: [],
-                  required: true,
-                  where: {
-                    [Op.or]: [
-                      { name: { [Op.iLike]: `%${normalizedSearch}%` } },
-                      { plate_number: { [Op.iLike]: `%${normalizedSearch}%` } },
-                    ],
+                  {
+                    model: Car,
+                    as: 'car',
+                    attributes: [],
+                    required: true,
+                    where: {
+                      [Op.or]: [
+                        { name: { [Op.iLike]: `%${normalizedSearch}%` } },
+                        { plate_number: { [Op.iLike]: `%${normalizedSearch}%` } },
+                      ],
+                    },
                   },
-                },
-              ]
+                ]
               : []),
           ],
           attributes: [
@@ -278,7 +281,24 @@ export class CarDailyExpenseService {
           raw: true,
           subQuery: false,
         }),
+        this.carFuelNormRepo.findAll({
+          where: car_id ? { car_id } : {},
+          attributes: [
+            'fuel_id',
+            [fn('SUM', col('current_balance')), 'total_current_balance'],
+          ],
+          group: ['fuel_id'],
+          raw: true,
+        }),
       ]);
+
+      const normBalanceMap = new Map<string, number>();
+      (fuelNormsRaw as any[]).forEach((fnRow) => {
+        normBalanceMap.set(
+          fnRow.fuel_id,
+          Number(fnRow.total_current_balance) || 0,
+        );
+      });
 
       const totals = (totalsRaw as any[]).map((row) => ({
         fuel_id: row.fuel_id,
@@ -288,6 +308,7 @@ export class CarDailyExpenseService {
         total_fuel_expence: Number(row.total_fuel_expence) || 0,
         total_mileage: Number(row.total_mileage) || 0,
         total_price_sum: Number(row.total_price_sum) || 0,
+        current_balance: normBalanceMap.get(row.fuel_id) ?? 0,
       }));
 
       const totalPages = Math.ceil(total / limitNum) || 0;
@@ -1029,5 +1050,305 @@ export class CarDailyExpenseService {
       }),
     ]);
     return { totalEmployees, totalCars };
+  }
+
+  async getOrganizationMonthlyReport(
+    query: OrganizationMonthlyReportQueryDto,
+  ) {
+    try {
+      const year = Number(query.year);
+      const month = Number(query.month);
+      const page = Math.max(Number(query.page) || 1, 1);
+      const limit = Math.max(Number(query.limit) || 10, 1);
+      const offset = (page - 1) * limit;
+
+      // Sana oralig'i hisoblash (fevral kabisa yili 28/29 avtomatik aniqlanadi)
+      const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+      const daysInMonth = new Date(year, month, 0).getDate();
+      const endDate = `${year}-${String(month).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
+
+      // Mashinalar uchun filter
+      const carWhere: any = {};
+      if (query.is_active !== undefined) {
+        carWhere.is_active = query.is_active;
+      }
+      if (query.search) {
+        const normalizedSearch = normalizeName(query.search);
+        carWhere[Op.or] = [
+          { name: { [Op.iLike]: `%${normalizedSearch}%` } },
+          { plate_number: { [Op.iLike]: `%${normalizedSearch}%` } },
+        ];
+      }
+
+      // Filterga mos BARCHA mashinalar soni va joriy sahifadagi mashinalar
+      const [total, pageCars] = await Promise.all([
+        this.carRepo.count({ where: carWhere }),
+        this.carRepo.findAll({
+          where: carWhere,
+          offset,
+          limit,
+          order: [['name', 'ASC']],
+          include: [
+            {
+              model: Employee,
+              as: 'responsible_employee',
+              attributes: ['id', 'full_name', 'phone', 'role'],
+              required: false,
+            },
+            {
+              model: Employee,
+              as: 'driver',
+              attributes: ['id', 'full_name', 'phone', 'role'],
+              required: false,
+            },
+          ],
+        }),
+      ]);
+
+      const pageCarIds = pageCars.map((c) => c.id);
+
+      // Barcha yoqilg'i turlari va ularning narxlari
+      const fuelsList = await this.fuelRepo.findAll();
+      const fuelMap = new Map<string, Fuel>();
+      fuelsList.forEach((f) => fuelMap.set(f.id, f));
+
+      let pageCarsData: any[] = [];
+
+      if (pageCarIds.length > 0) {
+        // Joriy sahifa mashinalarining oylik xarajat yozuvlari
+        const pageExpenses = await this.expenseRepo.findAll({
+          where: {
+            car_id: pageCarIds,
+            date: { [Op.between]: [startDate, endDate] },
+          },
+          order: [
+            ['car_id', 'ASC'],
+            ['fuel_id', 'ASC'],
+            ['date', 'ASC'],
+            ['sequence_no', 'ASC'],
+          ],
+        });
+
+        // Expense larni car_id va fuel_id bo'yicha guruhlash
+        const expensesByCarAndFuel = new Map<
+          string,
+          Map<string, CarDailyExpense[]>
+        >();
+        const holidayByCar = new Map<
+          string,
+          { km: number; amount: number; sum: number }
+        >();
+
+        pageExpenses.forEach((exp) => {
+          if (!expensesByCarAndFuel.has(exp.car_id)) {
+            expensesByCarAndFuel.set(exp.car_id, new Map());
+          }
+          const fuelGroup = expensesByCarAndFuel.get(exp.car_id)!;
+          if (!fuelGroup.has(exp.fuel_id)) {
+            fuelGroup.set(exp.fuel_id, []);
+          }
+          fuelGroup.get(exp.fuel_id)!.push(exp);
+
+          if (exp.is_holiday) {
+            if (!holidayByCar.has(exp.car_id)) {
+              holidayByCar.set(exp.car_id, { km: 0, amount: 0, sum: 0 });
+            }
+            const h = holidayByCar.get(exp.car_id)!;
+            const price = fuelMap.get(exp.fuel_id)?.price || 0;
+            h.km += Number(exp.mileage) || 0;
+            h.amount += Number(exp.fuel_expence) || 0;
+            h.sum += (Number(exp.fuel_expence) || 0) * price;
+          }
+        });
+
+        pageCarsData = pageCars.map((car) => {
+          const fuelGroup = expensesByCarAndFuel.get(car.id);
+          const carHoliday = holidayByCar.get(car.id) || {
+            km: 0,
+            amount: 0,
+            sum: 0,
+          };
+
+          let carTotalMileage = 0;
+          let carTotalSum = 0;
+          const fuelsResult: any[] = [];
+
+          if (fuelGroup) {
+            fuelGroup.forEach((records, fuelId) => {
+              const fuel = fuelMap.get(fuelId);
+              const price = fuel?.price || 0;
+
+              let consumedAmount = 0;
+              records.forEach((r) => {
+                carTotalMileage += Number(r.mileage) || 0;
+                consumedAmount += Number(r.fuel_expence) || 0;
+              });
+
+              const consumedSum = consumedAmount * price;
+              carTotalSum += consumedSum;
+
+              const firstRec = records[0];
+              const lastRec = records[records.length - 1];
+
+              // Oy boshidagi balans: birinchi yozuvdan orqaga hisoblash
+              const startBalance =
+                Number(firstRec.balance_after) -
+                Number(firstRec.received_amount) +
+                Number(firstRec.fuel_expence);
+
+              // Oy oxiridagi balans: oxirgi yozuvning balance_after
+              const endBalance = Number(lastRec.balance_after) || 0;
+
+              fuelsResult.push({
+                fuel_id: fuelId,
+                fuel_name: fuel?.name || '',
+                fuel_unit: fuel?.unit || '',
+                start_balance: startBalance,
+                consumed_amount: consumedAmount,
+                consumed_sum: consumedSum,
+                end_balance: endBalance,
+              });
+            });
+          }
+
+          return {
+            car: {
+              id: car.id,
+              name: car.name,
+              plate_number: car.plate_number,
+              responsible_employee: car.responsible_employee
+                ? { full_name: car.responsible_employee.full_name }
+                : null,
+              driver: car.driver ? { full_name: car.driver.full_name } : null,
+            },
+            total_mileage: carTotalMileage,
+            fuels: fuelsResult,
+            total_sum: carTotalSum,
+            holiday: {
+              km: carHoliday.km,
+              amount: carHoliday.amount,
+              sum: carHoliday.sum,
+            },
+          };
+        });
+      }
+
+      // GRAND TOTAL: BARCHA filtrlangan mashinalar bo'yicha (sahifalashdan MUSTAQIL)
+      const allMatchingCarIds = (
+        await this.carRepo.findAll({
+          where: carWhere,
+          attributes: ['id'],
+          raw: true,
+        })
+      ).map((c: any) => c.id);
+
+      let grandTotalMileage = 0;
+      let grandTotalSum = 0;
+      const grandTotalFuelsMap = new Map<
+        string,
+        { amount: number; sum: number }
+      >();
+      const grandTotalHoliday = { km: 0, amount: 0, sum: 0 };
+
+      if (allMatchingCarIds.length > 0) {
+        const [grandTotalAgg, grandTotalFuelsAgg, grandTotalHolidayAgg] =
+          await Promise.all([
+            this.expenseRepo.findAll({
+              where: {
+                car_id: allMatchingCarIds,
+                date: { [Op.between]: [startDate, endDate] },
+              },
+              attributes: [[fn('SUM', col('mileage')), 'total_mileage']],
+              raw: true,
+            }),
+            this.expenseRepo.findAll({
+              where: {
+                car_id: allMatchingCarIds,
+                date: { [Op.between]: [startDate, endDate] },
+              },
+              attributes: [
+                'fuel_id',
+                [fn('SUM', col('fuel_expence')), 'total_consumed_amount'],
+              ],
+              group: ['fuel_id'],
+              raw: true,
+            }),
+            this.expenseRepo.findAll({
+              where: {
+                car_id: allMatchingCarIds,
+                date: { [Op.between]: [startDate, endDate] },
+                is_holiday: true,
+              },
+              attributes: [
+                'fuel_id',
+                [fn('SUM', col('mileage')), 'km'],
+                [fn('SUM', col('fuel_expence')), 'amount'],
+              ],
+              group: ['fuel_id'],
+              raw: true,
+            }),
+          ]);
+
+        grandTotalMileage = Number((grandTotalAgg[0] as any)?.total_mileage) || 0;
+
+        (grandTotalFuelsAgg as any[]).forEach((row) => {
+          const fuel = fuelMap.get(row.fuel_id);
+          const price = fuel?.price || 0;
+          const amount = Number(row.total_consumed_amount) || 0;
+          const sum = amount * price;
+          grandTotalFuelsMap.set(row.fuel_id, { amount, sum });
+          grandTotalSum += sum;
+        });
+
+        (grandTotalHolidayAgg as any[]).forEach((row) => {
+          const fuel = fuelMap.get(row.fuel_id);
+          const price = fuel?.price || 0;
+          const km = Number(row.km) || 0;
+          const amount = Number(row.amount) || 0;
+          grandTotalHoliday.km += km;
+          grandTotalHoliday.amount += amount;
+          grandTotalHoliday.sum += amount * price;
+        });
+      }
+
+      const grandTotalFuels = Array.from(grandTotalFuelsMap.entries()).map(
+        ([fuelId, val]) => {
+          const fuel = fuelMap.get(fuelId);
+          return {
+            fuel_id: fuelId,
+            fuel_name: fuel?.name || '',
+            fuel_unit: fuel?.unit || '',
+            total_consumed_amount: val.amount,
+            total_consumed_sum: val.sum,
+          };
+        },
+      );
+
+      const totalPages = Math.ceil(total / limit) || 0;
+
+      return {
+        year,
+        month,
+        page,
+        limit,
+        total,
+        totalPages,
+        data: pageCarsData,
+        grand_total: {
+          total_mileage: grandTotalMileage,
+          fuels: grandTotalFuels,
+          total_sum: grandTotalSum,
+          holiday: grandTotalHoliday,
+        },
+      };
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      console.error('getOrganizationMonthlyReport error:', error);
+      throw new InternalServerErrorException(
+        'Tashkilot oylik hisobotini olishda xatolik yuz berdi',
+      );
+    }
   }
 }
