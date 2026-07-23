@@ -7,7 +7,7 @@ export class QueryIs_deleteDto {
     required: false,
     description:
       "true — faqat o'chirilgan yozuvlarni ko'rsatadi, false — faqat " +
-      "aktiv (o'chirilmagan) yozuvlarni ko'rsatadi (DEFAULT), " +
+      "aktiv (o'chirilmagan) yozuvlarni ko'rsatadi, " +
       'berilmasa faqat aktiv yozuvlar qaytadi',
   })
   @IsOptional()
@@ -19,18 +19,18 @@ export class QueryIs_deleteDto {
     if (value === 'false' || value === false) return false;
     return value;
   })
-  @IsBoolean()
+  @IsBoolean({ message: "is_deleted true yoki false qiymatida bo'lishi kerak" })
   is_deleted?: boolean;
 
   @ApiProperty({
-    description: 'Page number',
+    description: 'Sahifa raqami',
     example: 1,
     default: 1,
     required: false,
   })
   @IsOptional()
   @Type(() => Number)
-  @IsNumber()
-  @Min(1)
+  @IsNumber({}, { message: "Sahifa raqami raqam bo'lishi kerak" })
+  @Min(1, { message: "Sahifa raqami kamida 1 bo'lishi kerak" })
   page?: number = 1;
 }

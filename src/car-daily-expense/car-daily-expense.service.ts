@@ -8,7 +8,7 @@ import {
   HttpException,
 } from '@nestjs/common';
 import { InjectModel, InjectConnection } from '@nestjs/sequelize';
-import { IncludeOptions, Op, WhereOptions } from 'sequelize';
+import { IncludeOptions, Op, WhereOptions, fn, col, literal } from 'sequelize';
 import { Sequelize } from 'sequelize';
 import { CarDailyExpense } from './models/car-daily-expense.model';
 import { CarFuelNorm } from '../car-fuel-norm/models/car-fuel-norm.model';
@@ -17,8 +17,15 @@ import { UpdateCarDailyExpenseDto } from './dto/update-car-daily-expense.dto';
 import { QueryCarDailyExpenseDto } from './dto/query-car-daily-expense.dto';
 import { CarMonthlyReportQueryDto } from './dto/car-monthly-report-query.dto';
 import { MonthlyStatisticsQueryDto } from './dto/monthly-statistics-query.dto';
+import { YearlyStatisticsQueryDto } from './dto/yearly-statistics-query.dto';
 import { Car } from '../cars/models/cars.models';
 import { Fuel } from '../fuels/models/fuels.models';
+import { Employee } from '../employees/models/employee.model';
+import { normalizeName } from '../common/utils/normalize-name.util';
+
+// DIQQAT: CarDailyExpense modulida note (izoh) maydoni erkin matn bo'lgani sababli,
+// uni majburan UPPERCASE qilish noqulaylik tug'diradi. Shu sababli note maydoniga
+// normalizeName() QO'LLANILMAYDI (faqat GET search parametrida normalizeName ishlatiladi).
 
 @Injectable()
 export class CarDailyExpenseService {
@@ -27,6 +34,7 @@ export class CarDailyExpenseService {
     private readonly expenseRepo: typeof CarDailyExpense,
     @InjectModel(Car) private readonly carRepo: typeof Car,
     @InjectModel(Fuel) private readonly fuelRepo: typeof Fuel,
+    @InjectModel(Employee) private readonly employeeRepo: typeof Employee,
     @InjectModel(CarFuelNorm)
     private readonly carFuelNormRepo: typeof CarFuelNorm,
     @InjectConnection() private readonly sequelize: Sequelize,
@@ -41,6 +49,11 @@ export class CarDailyExpenseService {
         });
         if (!car) {
           throw new NotFoundException('Mashina topilmadi');
+        }
+        if (dto.date > new Date().toISOString().split('T')[0]) {
+          throw new BadRequestException(
+            "Kelgusi kunlar uchun ma'lumot kiritish mumkin emas",
+          );
         }
 
         const carFuelNorm = await this.carFuelNormRepo.findOne({
@@ -128,23 +141,34 @@ export class CarDailyExpenseService {
     page: number;
     limit: number;
     totalPages: number;
+    totals: {
+      fuel_id: string;
+      fuel_name: string;
+      fuel_unit: string;
+      total_received_amount: number;
+      total_fuel_expence: number;
+      total_mileage: number;
+      total_price_sum: number;
+    }[];
   }> {
     try {
       const {
-        page,
-        limit,
+        page = 1,
+        limit = 10,
         car_id,
         fuel_id,
         date_from,
         date_to,
         is_holiday,
         search,
-        sortBy,
-        sortOrder,
+        sortBy = 'date',
+        sortOrder = 'DESC',
       } = query;
-      const offset = (page - 1) * limit;
+      const pageNum = Number(page) || 1;
+      const limitNum = Number(limit) || 10;
+      const offset = (pageNum - 1) * limitNum;
 
-      const where: WhereOptions = {};
+      const where: WhereOptions<any> = {};
 
       if (car_id) {
         where.car_id = car_id;
@@ -170,46 +194,111 @@ export class CarDailyExpenseService {
         {
           model: Car,
           as: 'car',
+          required: false,
         },
         {
           model: Fuel,
           as: 'fuel',
+          required: false,
         },
       ];
 
       if (search) {
+        const normalizedSearch = normalizeName(search);
         include[0].where = {
           [Op.or]: [
-            { name: { [Op.iLike]: `%${search}%` } },
-            { plate_number: { [Op.iLike]: `%${search}%` } },
+            { name: { [Op.iLike]: `%${normalizedSearch}%` } },
+            { plate_number: { [Op.iLike]: `%${normalizedSearch}%` } },
           ],
         };
+        include[0].required = true;
       }
 
       const order: [string, string][] = [];
       if (sortBy) {
         order.push([sortBy, sortOrder]);
+        if (sortBy !== 'sequence_no') {
+          order.push(['sequence_no', sortOrder]);
+        }
       }
 
-      const [data, total] = await Promise.all([
+      const normalizedSearch = search ? normalizeName(search) : '';
+
+      const [data, total, totalsRaw] = await Promise.all([
         this.expenseRepo.findAll({
           where,
           offset,
-          limit,
+          limit: limitNum,
           order,
           include,
+          subQuery: false,
         }),
-        this.expenseRepo.count({ where }),
+        this.expenseRepo.count({ where, include, distinct: true }),
+        this.expenseRepo.findAll({
+          where,
+          include: [
+            {
+              model: Fuel,
+              as: 'fuel',
+              attributes: [],
+              required: false,
+            },
+            ...(search
+              ? [
+                  {
+                    model: Car,
+                    as: 'car',
+                    attributes: [],
+                    required: true,
+                    where: {
+                      [Op.or]: [
+                        { name: { [Op.iLike]: `%${normalizedSearch}%` } },
+                        { plate_number: { [Op.iLike]: `%${normalizedSearch}%` } },
+                      ],
+                    },
+                  },
+                ]
+              : []),
+          ],
+          attributes: [
+            'fuel_id',
+            [fn('MAX', col('fuel.name')), 'fuel_name'],
+            [fn('MAX', col('fuel.unit')), 'fuel_unit'],
+            [fn('SUM', col('CarDailyExpense.received_amount')), 'total_received_amount'],
+            [fn('SUM', col('CarDailyExpense.fuel_expence')), 'total_fuel_expence'],
+            [fn('SUM', col('CarDailyExpense.mileage')), 'total_mileage'],
+            [
+              literal(
+                'SUM(COALESCE("CarDailyExpense"."fuel_expence", 0) * COALESCE("fuel"."price", 0))',
+              ),
+              'total_price_sum',
+            ],
+          ],
+          group: ['fuel_id'],
+          raw: true,
+          subQuery: false,
+        }),
       ]);
 
-      const totalPages = Math.ceil(total / limit);
+      const totals = (totalsRaw as any[]).map((row) => ({
+        fuel_id: row.fuel_id,
+        fuel_name: row.fuel_name || '',
+        fuel_unit: row.fuel_unit || '',
+        total_received_amount: Number(row.total_received_amount) || 0,
+        total_fuel_expence: Number(row.total_fuel_expence) || 0,
+        total_mileage: Number(row.total_mileage) || 0,
+        total_price_sum: Number(row.total_price_sum) || 0,
+      }));
+
+      const totalPages = Math.ceil(total / limitNum) || 0;
 
       return {
         data,
         total,
-        page,
-        limit,
+        page: pageNum,
+        limit: limitNum,
         totalPages,
+        totals,
       };
     } catch (error) {
       if (error instanceof HttpException) {
@@ -271,9 +360,9 @@ export class CarDailyExpenseService {
         });
         if (!lastRecord || lastRecord.id !== record.id) {
           throw new ForbiddenException(
-            "Faqat shu mashina bo'yicha ENG OXIRGI yaratilgan rasxod yozuvini " +
+            "Faqat shu mashina bo'yicha eng oxirgi yaratilgan rasxod yozuvini " +
               "(yoqilg'i turidan qat'i nazar) tahrirlash mumkin. Avvalgi " +
-              'yozuvlar yopilgan hisoblanadi.',
+              'yozuvlar yopilgan hisoblanadi',
           );
         }
 
@@ -370,8 +459,8 @@ export class CarDailyExpenseService {
         });
         if (!lastRecord || lastRecord.id !== record.id) {
           throw new ForbiddenException(
-            "Faqat shu mashina bo'yicha ENG OXIRGI yaratilgan rasxod yozuvini " +
-              "o'chirish mumkin.",
+            "Faqat shu mashina bo'yicha eng oxirgi yaratilgan rasxod yozuvini " +
+              "o'chirish mumkin",
           );
         }
 
@@ -794,5 +883,146 @@ export class CarDailyExpenseService {
         'Oylik statistikani olishda xatolik yuz berdi',
       );
     }
+  }
+
+  async getYearlyStatistics(query: YearlyStatisticsQueryDto) {
+    try {
+      const { year, car_id, is_active } = query;
+      const date_from = `${year}-01-01`;
+      const date_to = `${year}-12-31`;
+
+      const carWhere: any = {};
+      if (car_id) carWhere.id = car_id;
+      if (is_active !== undefined) carWhere.is_active = is_active;
+
+      const cars = await this.carRepo.findAll({
+        where: carWhere,
+        attributes: ['id', 'name', 'plate_number'],
+      });
+
+      const fuels = await this.fuelRepo.findAll();
+
+      const expenses = (await this.expenseRepo.findAll({
+        where: {
+          ...(car_id ? { car_id } : {}),
+          date: { [Op.between]: [date_from, date_to] },
+        },
+        attributes: [
+          'car_id',
+          'fuel_id',
+          [fn('EXTRACT', literal('MONTH FROM "date"')), 'month'],
+          [fn('SUM', col('mileage')), 'total_mileage'],
+          [fn('SUM', col('received_amount')), 'total_received_amount'],
+          [fn('SUM', col('fuel_expence')), 'total_fuel_expence'],
+        ],
+        group: [
+          'car_id',
+          'fuel_id',
+          literal('EXTRACT(MONTH FROM "date")') as any,
+        ],
+        raw: true,
+      })) as any[];
+
+      const expensesMap = new Map<string, any[]>();
+      for (const e of expenses) {
+        const key = `${e.car_id}_${e.fuel_id}`;
+        if (!expensesMap.has(key)) expensesMap.set(key, []);
+        expensesMap.get(key)!.push(e);
+      }
+
+      const carsResult = cars.map((car) => {
+        const carFuelsResult: any[] = [];
+
+        for (const fuel of fuels) {
+          const key = `${car.id}_${fuel.id}`;
+          const fuelExpenses = expensesMap.get(key) || [];
+
+          if (fuelExpenses.length === 0) {
+            continue;
+          }
+
+          let yearly_total_mileage = 0;
+          let yearly_total_received = 0;
+          let yearly_total_expence = 0;
+
+          const monthly_breakdown = Array.from({ length: 12 }, (_, i) => {
+            const monthNum = i + 1;
+            const monthRecord = fuelExpenses.find(
+              (r) => Number(r.month) === monthNum,
+            );
+
+            const m_mileage = monthRecord ? Number(monthRecord.total_mileage) : 0;
+            const m_received = monthRecord
+              ? Number(monthRecord.total_received_amount)
+              : 0;
+            const m_expence = monthRecord
+              ? Number(monthRecord.total_fuel_expence)
+              : 0;
+
+            yearly_total_mileage += m_mileage;
+            yearly_total_received += m_received;
+            yearly_total_expence += m_expence;
+
+            return {
+              month: monthNum,
+              total_mileage: m_mileage,
+              total_received_amount: m_received,
+              total_fuel_expence: m_expence,
+            };
+          });
+
+          carFuelsResult.push({
+            fuel_id: fuel.id,
+            fuel_name: fuel.name,
+            fuel_unit: fuel.unit,
+            yearly_total: {
+              total_mileage: yearly_total_mileage,
+              total_received_amount: yearly_total_received,
+              total_fuel_expence: yearly_total_expence,
+            },
+            monthly_breakdown,
+          });
+        }
+
+        return {
+          car: {
+            id: car.id,
+            name: car.name,
+            plate_number: car.plate_number,
+          },
+          fuels: carFuelsResult,
+        };
+      });
+
+      return {
+        year,
+        cars: carsResult,
+      };
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      console.error('getYearlyStatistics error:', error);
+      throw new InternalServerErrorException(
+        'Yillik statistikani olishda xatolik yuz berdi',
+      );
+    }
+  }
+
+  async allEmployesAndCarsCount() {
+    const [totalEmployees, totalCars] = await Promise.all([
+      this.employeeRepo.count({
+        where: {
+          is_deleted: false,
+        },
+        group: ['role'],
+      }),
+      this.carRepo.count({
+        where: {
+          is_deleted: false,
+        },
+      }),
+    ]);
+    return { totalEmployees, totalCars };
   }
 }

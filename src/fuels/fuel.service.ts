@@ -11,6 +11,7 @@ import { Fuel } from './models/fuels.models';
 import { CreateFuelDto } from './dto/create-fuel.dto';
 import { UpdateFuelDto } from './dto/update-fuel.dto';
 import { QueryFuelDto } from './dto/query-fuel.dto';
+import { normalizeName } from '../common/utils/normalize-name.util';
 
 @Injectable()
 export class FuelService {
@@ -18,28 +19,31 @@ export class FuelService {
 
   async create(dto: CreateFuelDto): Promise<Fuel> {
     try {
+      // Normalizatsiya faqat name maydoniga qo'llanadi (unit o'lchov birligiga tegmaymiz)
+      const normalizedDto = {
+        ...dto,
+        name: normalizeName(dto.name),
+      };
+
+      // Unikal tekshiruv normalizatsiya qilingan name bo'yicha bajariladi
       const existingFuel = await this.fuelRepo.findOne({
-        where: {
-          name: {
-            [Op.iLike]: dto.name,
-          },
-        },
+        where: { name: normalizedDto.name },
       });
 
       if (existingFuel) {
         throw new ConflictException(
-          `"${dto.name}" nomli fuel allaqachon mavjud`,
+          `"${normalizedDto.name}" nomli yoqilg'i turi allaqachon mavjud`,
         );
       }
 
-      const fuel = await this.fuelRepo.create(dto);
+      const fuel = await this.fuelRepo.create(normalizedDto);
       return fuel;
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
       }
       throw new InternalServerErrorException(
-        'Fuel yaratishda xatolik yuz berdi',
+        "Yoqilg'i turini yaratishda xatolik yuz berdi",
       );
     }
   }
@@ -52,14 +56,15 @@ export class FuelService {
     totalPages: number;
   }> {
     try {
-      const { page, limit, search, sortBy, sortOrder } = query;
+      const { page = 1, limit = 10, search, sortBy, sortOrder } = query;
       const offset = (page - 1) * limit;
 
       const where: WhereOptions = {};
 
       if (search) {
+        const normalizedSearch = normalizeName(search);
         where.name = {
-          [Op.iLike]: `%${search}%`,
+          [Op.iLike]: `%${normalizedSearch}%`,
         };
       }
 
@@ -92,7 +97,7 @@ export class FuelService {
         throw error;
       }
       throw new InternalServerErrorException(
-        'Fuel larni olishda xatolik yuz berdi',
+        "Yoqilg'i turlarini olishda xatolik yuz berdi",
       );
     }
   }
@@ -101,7 +106,7 @@ export class FuelService {
     try {
       const fuel = await this.fuelRepo.findByPk(id);
       if (!fuel) {
-        throw new NotFoundException(`ID ${id} bo'yicha fuel topilmadi`);
+        throw new NotFoundException(`ID ${id} bo'yicha yoqilg'i turi topilmadi`);
       }
       return fuel;
     } catch (error) {
@@ -109,7 +114,7 @@ export class FuelService {
         throw error;
       }
       throw new InternalServerErrorException(
-        'Fuel ni olishda xatolik yuz berdi',
+        "Yoqilg'i turini olishda xatolik yuz berdi",
       );
     }
   }
@@ -118,26 +123,25 @@ export class FuelService {
     try {
       await this.findOne(id);
 
-      if (dto.name) {
+      const normalizedDto: any = { ...dto };
+      if (dto.name !== undefined) {
+        normalizedDto.name = normalizeName(dto.name);
+        // Unikal tekshiruv normalizatsiya qilingan name bo'yicha bajariladi
         const existingFuel = await this.fuelRepo.findOne({
           where: {
-            name: {
-              [Op.iLike]: dto.name,
-            },
-            id: {
-              [Op.ne]: id,
-            },
+            name: normalizedDto.name,
+            id: { [Op.ne]: id },
           },
         });
 
         if (existingFuel) {
           throw new ConflictException(
-            `"${dto.name}" nomli fuel allaqachon mavjud`,
+            `"${normalizedDto.name}" nomli yoqilg'i turi allaqachon mavjud`,
           );
         }
       }
 
-      const fuel = await this.fuelRepo.update(dto, {
+      const fuel = await this.fuelRepo.update(normalizedDto, {
         where: { id },
         returning: true,
       });
@@ -148,7 +152,7 @@ export class FuelService {
         throw error;
       }
       throw new InternalServerErrorException(
-        'Fuel ni yangilashda xatolik yuz berdi',
+        "Yoqilg'i turini yangilashda xatolik yuz berdi",
       );
     }
   }
@@ -157,13 +161,19 @@ export class FuelService {
     try {
       const fuel = await this.findOne(id);
       await fuel.destroy();
-      return { message: "Fuel muvaffaqiyatli o'chirildi" };
-    } catch (error) {
+      return { message: "Yoqilg'i turi muvaffaqiyatli o'chirildi" };
+    } catch (error: any) {
       if (error instanceof HttpException) {
         throw error;
       }
+      if (error.name === 'SequelizeForeignKeyConstraintError') {
+        throw new ConflictException(
+          "Bu yoqilg'i turidan boshqa joylarda (norma yoki rasxodlarda) foydalanilganligi sababli uni o'chirib bo'lmaydi",
+        );
+      }
+      console.error('Fuel delete error:', error);
       throw new InternalServerErrorException(
-        "Fuel ni o'chirishda xatolik yuz berdi",
+        "Yoqilg'i turini o'chirishda xatolik yuz berdi",
       );
     }
   }

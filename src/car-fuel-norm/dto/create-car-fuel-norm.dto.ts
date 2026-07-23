@@ -9,36 +9,36 @@ import {
 
 export class CreateCarFuelNormDto {
   @ApiProperty({
-    description: 'Car ID',
+    description: 'Mashina ID kaliti',
     example: 'uuid',
   })
-  @IsUUID()
-  @IsNotEmpty()
+  @IsUUID('4', { message: "Mashina ID si to'g'ri UUID formatida bo'lishi kerak" })
+  @IsNotEmpty({ message: 'Mashina ID si kiritilishi shart' })
   car_id: string;
 
   @ApiProperty({
-    description: 'Fuel ID',
+    description: "Yoqilg'i turi ID kaliti",
     example: 'uuid',
   })
-  @IsUUID()
-  @IsNotEmpty()
+  @IsUUID('4', { message: "Yoqilg'i turi ID si to'g'ri UUID formatida bo'lishi kerak" })
+  @IsNotEmpty({ message: "Yoqilg'i turi ID si kiritilishi shart" })
   fuel_id: string;
 
   @ApiProperty({
-    description: 'Norm per 100km',
+    description: '100 km uchun sarf normasi',
     example: 8.5,
   })
-  @IsNumber()
-  @IsPositive()
+  @IsNumber({}, { message: "100 km ga norma me'yori raqam bo'lishi kerak" })
+  @IsPositive({ message: "100 km ga norma me'yori musbat son bo'lishi kerak" })
   norm_per_100km: number;
 
   @ApiProperty({
-    description: 'Current balance',
+    description: 'Joriy yoqilg‘i balansi',
     example: 0,
     default: 0,
     required: false,
   })
-  @IsNumber()
   @IsOptional()
+  @IsNumber({}, { message: "Joriy balans raqam bo'lishi kerak" })
   current_balance?: number = 0;
 }

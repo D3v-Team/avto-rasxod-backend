@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -16,6 +17,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { ResetPasswordDto } from './dto/resetPassword.dto';
 import { QueryUserDto } from './dto/query-user.dto';
 import { UserRole } from '../common/enums/user-role.enum';
+import { normalizeName } from '../common/utils/normalize-name.util';
 
 const BCRYPT_ROUNDS = 10;
 const PAGE_LIMIT = 15;
@@ -38,7 +40,7 @@ export class UserService implements OnModuleInit {
     const plainPassword = this.configService.get<string>('ADMIN_PASSWORD');
     if (!plainPassword) {
       this.logger.error(
-        "ADMIN_PASSWORD env o'zgaruvchisi topilmadi! Super admin yaratilmadi.",
+        "ADMIN_PASSWORD muhit o'zgaruvchisi topilmadi! Super admin yaratilmadi.",
       );
       return;
     }
@@ -46,33 +48,40 @@ export class UserService implements OnModuleInit {
     try {
       const hashed_password = await this.hashPassword(plainPassword);
       await this.userRepo.create({
-        full_name: 'Super Admin',
+        full_name: 'SUPER ADMIN',
         username: this.configService.get<string>('ADMIN_USERNAME', 'admin'),
         hashed_password,
         role: UserRole.SUPER_ADMIN,
       });
-      this.logger.log('Super Admin muvaffaqiyatli yaratildi');
+      this.logger.log('Super admin muvaffaqiyatli yaratildi');
     } catch (error) {
-      this.logger.error('Super Admin yaratishda xatolik', error);
+      this.logger.error('Super admin yaratishda xatolik', error);
       throw new InternalServerErrorException(
-        'Super Admin yaratishda xatolik yuz berdi',
+        'Super admin yaratishda xatolik yuz berdi',
       );
     }
   }
 
   async createUser(dto: CreateUserDto) {
+    // Normalizatsiya kiritilgan matn maydonlariga qo'llanadi
+    const normalizedUsername = normalizeName(dto.username);
+    const normalizedFullName = normalizeName(dto.full_name);
+
+    // Unikal tekshiruv normalizatsiya qilingan username bo'yicha bajariladi
     const existing = await this.userRepo.findOne({
-      where: { username: dto.username },
+      where: { username: normalizedUsername },
     });
     if (existing) {
-      throw new BadRequestException(
-        `"${dto.username}" username allaqachon mavjud`,
+      throw new ConflictException(
+        `"${normalizedUsername}" username allaqachon mavjud`,
       );
     }
-    dto.full_name = this.normalizeName(dto.full_name);
+
     const hashed_password = await this.hashPassword(dto.password);
     await this.userRepo.create({
       ...dto,
+      username: normalizedUsername,
+      full_name: normalizedFullName,
       hashed_password,
       role: UserRole.ADMIN,
     });
@@ -86,7 +95,7 @@ export class UserService implements OnModuleInit {
 
   async getUserById(id: string) {
     const user = await this.userRepo.findByPk(id, { include: { all: true } });
-    if (!user) throw new NotFoundException(`ID ${id} bo'yicha admin topilmadi`);
+    if (!user) throw new NotFoundException(`ID ${id} bo'yicha foydalanuvchi topilmadi`);
     return user;
   }
 
@@ -99,27 +108,33 @@ export class UserService implements OnModuleInit {
   }
 
   async updateUser(id: string, dto: UpdateUserDto) {
-    if (dto.username) {
+    const normalizedDto: any = { ...dto };
+
+    // Normalizatsiya va unikal tekshiruvi faqatsiz yuborilgan qiymatlar uchun bajariladi
+    if (dto.username !== undefined) {
+      normalizedDto.username = normalizeName(dto.username);
       const duplicate = await this.userRepo.findOne({
-        where: { username: dto.username, id: { [Op.ne]: id } },
+        where: { username: normalizedDto.username, id: { [Op.ne]: id } },
       });
       if (duplicate) {
-        throw new BadRequestException(
-          `"${dto.username}" username allaqachon mavjud`,
+        throw new ConflictException(
+          `"${normalizedDto.username}" username allaqachon mavjud`,
         );
       }
     }
 
-    const user = await this.getUserById(id);
-    if (dto.full_name) {
-      dto.full_name = this.normalizeName(dto.full_name);
+    if (dto.full_name !== undefined) {
+      normalizedDto.full_name = normalizeName(dto.full_name);
     }
-    await user.update(dto);
+
+    const user = await this.getUserById(id);
+    await user.update(normalizedDto);
 
     return { message: 'Admin muvaffaqiyatli yangilandi' };
   }
 
   async resetUserPassword(id: string, dto: ResetPasswordDto) {
+    await this.getUserById(id);
     const hashed_password = await this.hashPassword(dto.new_password);
     await this.userRepo.update({ hashed_password }, { where: { id } });
 
@@ -130,7 +145,7 @@ export class UserService implements OnModuleInit {
     const user = await this.getUserById(id);
     await user.update({ is_deleted: true });
 
-    return { message: "Admin arxivlandi (o'chirildi)" };
+    return { message: 'Admin muvaffaqiyatli arxivlandi' };
   }
 
   async restoreUser(id: string): Promise<{ message: string }> {
@@ -142,17 +157,17 @@ export class UserService implements OnModuleInit {
         );
       }
       await user.update({ is_deleted: false });
-      return { message: 'Admin tiklandi' };
+      return { message: 'Admin muvaffaqiyatli tiklandi' };
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
       console.error('Restore user error:', error);
-      throw new InternalServerErrorException('Tiklashda xatolik yuz berdi');
+      throw new InternalServerErrorException('Adminni tiklashda xatolik yuz berdi');
     }
   }
 
   async findAll(query: QueryUserDto) {
     try {
-      const { is_deleted } = query;
+      const { is_deleted, search } = query;
 
       let scope: string | undefined = undefined;
       if (is_deleted === true) {
@@ -161,8 +176,17 @@ export class UserService implements OnModuleInit {
 
       const repo = scope ? this.userRepo.scope(scope) : this.userRepo;
 
+      const where: any = { role: UserRole.ADMIN };
+      if (search) {
+        const normalizedSearch = normalizeName(search);
+        where[Op.or] = [
+          { full_name: { [Op.iLike]: `%${normalizedSearch}%` } },
+          { username: { [Op.iLike]: `%${normalizedSearch}%` } },
+        ];
+      }
+
       const records = await repo.findAll({
-        where: { role: UserRole.ADMIN },
+        where,
       });
 
       return { data: records };
@@ -215,15 +239,5 @@ export class UserService implements OnModuleInit {
         'Parolni xesh qilishda xatolik yuz berdi',
       );
     }
-  }
-
-  private normalizeName(name: string): string {
-    if (!name) return name;
-
-    return name
-      .replace(/[‘’`´]/g, "'")
-      .replace(/["«»„“”]/g, '')
-      .trim()
-      .toUpperCase();
   }
 }

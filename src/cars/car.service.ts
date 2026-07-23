@@ -6,7 +6,7 @@ import {
   HttpException,
 } from '@nestjs/common';
 import { InjectModel, InjectConnection } from '@nestjs/sequelize';
-import { Op, WhereOptions } from 'sequelize';
+import { Op } from 'sequelize';
 import { Sequelize } from 'sequelize';
 import { Car } from './models/cars.models';
 import { Employee } from '../employees/models/employee.model';
@@ -15,6 +15,7 @@ import { CarDailyExpense } from '../car-daily-expense/models/car-daily-expense.m
 import { CreateCarDto } from './dto/create-car.dto';
 import { UpdateCarDto } from './dto/update-car.dto';
 import { QueryCarDto } from './dto/query-car.dto';
+import { normalizeName } from '../common/utils/normalize-name.util';
 
 @Injectable()
 export class CarService {
@@ -26,37 +27,47 @@ export class CarService {
     @InjectModel(CarDailyExpense)
     private readonly carDailyExpenseRepo: typeof CarDailyExpense,
     @InjectConnection() private readonly sequelize: Sequelize,
-  ) { }
+  ) {}
 
   async create(dto: CreateCarDto): Promise<Car> {
     try {
-      if (dto.responsible_employee_id) {
+      // Normalizatsiya name va plate_number maydonlariga qo'llanadi
+      const normalizedDto = {
+        ...dto,
+        name: normalizeName(dto.name),
+        plate_number: normalizeName(dto.plate_number),
+      };
+
+      if (normalizedDto.responsible_employee_id) {
         const responsibleEmployee = await this.employeeRepo.findByPk(
-          dto.responsible_employee_id,
+          normalizedDto.responsible_employee_id,
         );
         if (!responsibleEmployee) {
           throw new NotFoundException("Mas'ul xodim topilmadi");
         }
       }
 
-      if (dto.driver_id) {
-        const driverEmployee = await this.employeeRepo.findByPk(dto.driver_id);
+      if (normalizedDto.driver_id) {
+        const driverEmployee = await this.employeeRepo.findByPk(
+          normalizedDto.driver_id,
+        );
         if (!driverEmployee) {
           throw new NotFoundException('Haydovchi xodim topilmadi');
         }
       }
 
+      // Unikal tekshiruv normalizatsiya qilingan plate_number bo'yicha bajariladi
       const existingCar = await this.carRepo.findOne({
-        where: { plate_number: dto.plate_number },
+        where: { plate_number: normalizedDto.plate_number },
       });
 
       if (existingCar) {
         throw new ConflictException(
-          `"${dto.plate_number}" raqamli mashina allaqachon mavjud`,
+          `"${normalizedDto.plate_number}" davlat raqamli mashina allaqachon mavjud`,
         );
       }
 
-      const car = await this.carRepo.create(dto);
+      const car = await this.carRepo.create(normalizedDto);
       return car;
     } catch (error) {
       if (error instanceof HttpException) {
@@ -78,8 +89,8 @@ export class CarService {
   }> {
     try {
       const {
-        page,
-        limit,
+        page = 1,
+        limit = 10,
         search,
         is_active,
         responsible_employee_id,
@@ -90,19 +101,16 @@ export class CarService {
       } = query;
       const offset = (page - 1) * limit;
 
-      // where: any qilib olamiz, chunki Op.or symbol kalit, WhereOptions
-      // generic siz bu kalitni qabul qilmaydi (TS2538 xatosi shundan)
       const where: any = {};
 
       if (search) {
+        const normalizedSearch = normalizeName(search);
         where[Op.or] = [
-          { name: { [Op.iLike]: `%${search}%` } },
-          { plate_number: { [Op.iLike]: `%${search}%` } },
+          { name: { [Op.iLike]: `%${normalizedSearch}%` } },
+          { plate_number: { [Op.iLike]: `%${normalizedSearch}%` } },
         ];
       }
 
-      // is_active faqat undefined BO'LMAGANDA filtrlanadi — DTO dagi
-      // @Transform to'g'ri sozlangan bo'lishi SHART (value===undefined -> undefined)
       if (is_active !== undefined) {
         where.is_active = is_active;
       }
@@ -223,38 +231,49 @@ export class CarService {
     try {
       await this.findOne(id);
 
-      if (dto.plate_number) {
+      const normalizedDto: any = { ...dto };
+      if (dto.name !== undefined) {
+        normalizedDto.name = normalizeName(dto.name);
+      }
+      if (dto.plate_number !== undefined) {
+        normalizedDto.plate_number = normalizeName(dto.plate_number);
+      }
+
+      // Unikal tekshiruv normalizatsiya qilingan plate_number bo'yicha bajariladi
+      if (normalizedDto.plate_number) {
         const existingCar = await this.carRepo.findOne({
           where: {
-            plate_number: dto.plate_number,
+            plate_number: normalizedDto.plate_number,
             id: { [Op.ne]: id },
           },
         });
 
         if (existingCar) {
           throw new ConflictException(
-            `"${dto.plate_number}" raqamli mashina allaqachon mavjud`,
+            `"${normalizedDto.plate_number}" davlat raqamli mashina allaqachon mavjud`,
           );
         }
       }
 
-      if (dto.responsible_employee_id) {
+      if (normalizedDto.responsible_employee_id) {
         const responsibleEmployee = await this.employeeRepo.findByPk(
-          dto.responsible_employee_id,
+          normalizedDto.responsible_employee_id,
         );
         if (!responsibleEmployee) {
           throw new NotFoundException("Mas'ul xodim topilmadi");
         }
       }
 
-      if (dto.driver_id) {
-        const driverEmployee = await this.employeeRepo.findByPk(dto.driver_id);
+      if (normalizedDto.driver_id) {
+        const driverEmployee = await this.employeeRepo.findByPk(
+          normalizedDto.driver_id,
+        );
         if (!driverEmployee) {
           throw new NotFoundException('Haydovchi xodim topilmadi');
         }
       }
 
-      const car = await this.carRepo.update(dto, {
+      const car = await this.carRepo.update(normalizedDto, {
         where: { id },
         returning: true,
       });
@@ -275,7 +294,7 @@ export class CarService {
     try {
       const car = await this.findOne(id);
       await car.update({ is_deleted: true });
-      return { message: "Mashina arxivlandi (o'chirildi)" };
+      return { message: 'Mashina muvaffaqiyatli arxivlandi' };
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
@@ -296,11 +315,13 @@ export class CarService {
         );
       }
       await car.update({ is_deleted: false });
-      return { message: 'Mashina tiklandi' };
+      return { message: 'Mashina muvaffaqiyatli tiklandi' };
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
       console.error('Restore car error:', error);
-      throw new InternalServerErrorException('Tiklashda xatolik yuz berdi');
+      throw new InternalServerErrorException(
+        'Mashinani tiklashda xatolik yuz berdi',
+      );
     }
   }
 }
