@@ -13,37 +13,37 @@ import { Transform, Type } from 'class-transformer';
 
 export class QueryCarDto {
   @ApiProperty({
-    description: 'Page number',
+    description: 'Sahifa raqami',
     example: 1,
     default: 1,
     required: false,
   })
   @IsOptional()
   @Type(() => Number)
-  @IsNumber()
-  @Min(1)
+  @IsNumber({}, { message: "Sahifa raqami raqam bo'lishi kerak" })
+  @Min(1, { message: "Sahifa raqami kamida 1 bo'lishi kerak" })
   page?: number = 1;
 
   @ApiProperty({
-    description: 'Items per page',
+    description: 'Har bir sahifadagi elementlar soni',
     example: 10,
     default: 10,
     required: false,
   })
   @IsOptional()
   @Type(() => Number)
-  @IsNumber()
-  @Min(1)
-  @Max(100)
+  @IsNumber({}, { message: "Limit raqam bo'lishi kerak" })
+  @Min(1, { message: "Limit kamida 1 bo'lishi kerak" })
+  @Max(100, { message: "Limit ko'pi bilan 100 bo'lishi kerak" })
   limit?: number = 10;
 
   @ApiProperty({
-    description: 'Search by name or plate number',
+    description: 'Mashina nomi yoki davlat raqami bo‘yicha qidiruv',
     example: 'Toyota',
     required: false,
   })
   @IsOptional()
-  @IsString()
+  @IsString({ message: "Qidiruv matni matn ko'rinishida bo'lishi kerak" })
   search?: string;
 
   @IsOptional()
@@ -55,50 +55,58 @@ export class QueryCarDto {
     if (value === 'false' || value === false) return false;
     return value;
   })
-  @IsBoolean()
+  @IsBoolean({ message: "is_active true yoki false qiymatida bo'lishi kerak" })
   @ApiProperty({ required: false })
   is_active?: boolean;
 
   @ApiProperty({
-    description: 'Filter by responsible employee ID',
+    description: "Mas'ul xodim ID kaliti bo'yicha filter",
     example: 'uuid',
     required: false,
   })
   @IsOptional()
-  @IsUUID()
+  @IsUUID('4', {
+    message: "Mas'ul xodim ID si to'g'ri UUID formatida bo'lishi kerak",
+  })
   responsible_employee_id?: string;
 
   @ApiProperty({
-    description: 'Filter by driver ID',
+    description: "Haydovchi ID kaliti bo'yicha filter",
     example: 'uuid',
     required: false,
   })
   @IsOptional()
-  @IsUUID()
+  @IsUUID('4', {
+    message: "Haydovchi ID si to'g'ri UUID formatida bo'lishi kerak",
+  })
   driver_id?: string;
 
   @ApiProperty({
-    description: 'Sort by field',
+    description: 'Saralash ustuni',
     example: 'createdAt',
     enum: ['name', 'plate_number', 'createdAt'],
     default: 'createdAt',
     required: false,
   })
   @IsOptional()
-  @IsString()
-  @IsIn(['name', 'plate_number', 'createdAt'])
+  @IsString({ message: "Saralash ustuni matn ko'rinishida bo'lishi kerak" })
+  @IsIn(['name', 'plate_number', 'createdAt'], {
+    message: "Saralash ustuni quyidagilardan biri bo'lishi kerak: name, plate_number, createdAt",
+  })
   sortBy?: string = 'createdAt';
 
   @ApiProperty({
-    description: 'Sort order',
+    description: 'Saralash yo‘nalishi',
     example: 'DESC',
     enum: ['ASC', 'DESC'],
     default: 'DESC',
     required: false,
   })
   @IsOptional()
-  @IsString()
-  @IsIn(['ASC', 'DESC'])
+  @IsString({ message: "Saralash yo'nalishi matn ko'rinishida bo'lishi kerak" })
+  @IsIn(['ASC', 'DESC'], {
+    message: "Saralash yo'nalishi ASC yoki DESC bo'lishi kerak",
+  })
   sortOrder?: 'ASC' | 'DESC' = 'DESC';
 
   @IsOptional()
@@ -110,7 +118,7 @@ export class QueryCarDto {
     if (value === 'false' || value === false) return false;
     return value;
   })
-  @IsBoolean()
+  @IsBoolean({ message: "is_deleted true yoki false qiymatida bo'lishi kerak" })
   @ApiProperty({ required: false })
   is_deleted?: boolean;
 }

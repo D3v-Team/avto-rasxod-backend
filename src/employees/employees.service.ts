@@ -9,7 +9,8 @@ import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 import { QueryIs_deleteDto } from './dto/query-employee.dto';
 import { EmployeeRole } from '../common/enums/employee-role.enum';
-import { Op, WhereOptions } from 'sequelize';
+import { Op } from 'sequelize';
+import { normalizeName } from '../common/utils/normalize-name.util';
 
 const PAGE_LIMIT = 10;
 
@@ -17,11 +18,16 @@ const PAGE_LIMIT = 10;
 export class EmployeesService {
   constructor(
     @InjectModel(Employee) private readonly employeeRepo: typeof Employee,
-  ) { }
+  ) {}
 
   async create(dto: CreateEmployeeDto) {
-    await this.employeeRepo.create({ ...dto });
-    return { message: "Xodim muvaffaqiyatli qo'shildi" };
+    // Normalizatsiya kiritilgan to'liq ism maydoniga qo'llanadi
+    const normalizedDto = {
+      ...dto,
+      full_name: normalizeName(dto.full_name),
+    };
+    await this.employeeRepo.create(normalizedDto);
+    return { message: 'Xodim muvaffaqiyatli yaratildi' };
   }
 
   async findAll(query: QueryIs_deleteDto) {
@@ -55,16 +61,16 @@ export class EmployeesService {
     page?: number;
     is_deleted?: boolean;
   }) {
-
-    const { limit, offset } = this.buildPagination(page)
+    const { limit, offset } = this.buildPagination(page);
     const where: any = {};
     if (role) {
       where.role = role;
     }
     if (searchTerm) {
+      const normalizedSearch = normalizeName(searchTerm);
       where[Op.or] = [
-        { full_name: { [Op.iLike]: `%${searchTerm}%` } },
-        { phone: { [Op.iLike]: `%${searchTerm}%` } },
+        { full_name: { [Op.iLike]: `%${normalizedSearch}%` } },
+        { phone: { [Op.iLike]: `%${normalizedSearch}%` } },
       ];
     }
 
@@ -95,14 +101,19 @@ export class EmployeesService {
 
   async update(id: string, dto: UpdateEmployeeDto) {
     const employee = await this.findOne(id);
-    await employee.update(dto);
+    const normalizedDto: any = { ...dto };
+    if (dto.full_name !== undefined) {
+      normalizedDto.full_name = normalizeName(dto.full_name);
+    }
+
+    await employee.update(normalizedDto);
     return { message: 'Xodim muvaffaqiyatli yangilandi' };
   }
 
   async remove(id: string) {
     const employee = await this.findOne(id);
     await employee.update({ is_deleted: true });
-    return { message: "Xodim arxivlandi (o'chirildi)" };
+    return { message: 'Xodim muvaffaqiyatli arxivlandi' };
   }
 
   async restore(id: string): Promise<{ message: string }> {
@@ -116,11 +127,13 @@ export class EmployeesService {
         );
       }
       await employee.update({ is_deleted: false });
-      return { message: 'Xodim tiklandi' };
+      return { message: 'Xodim muvaffaqiyatli tiklandi' };
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
       console.error('Restore employee error:', error);
-      throw new InternalServerErrorException('Tiklashda xatolik yuz berdi');
+      throw new InternalServerErrorException(
+        'Xodimni tiklashda xatolik yuz berdi',
+      );
     }
   }
 

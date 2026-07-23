@@ -5,22 +5,25 @@ import {
   IsBoolean,
   IsUUID,
   Matches,
+  IsNotEmpty,
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class MonthlyStatisticsQueryDto {
   @ApiProperty({
-    description: 'Month (YYYY-MM format)',
+    description: 'Oy (YYYY-MM formatida)',
     example: '2026-06',
   })
-  @IsString()
+  @IsString({ message: "Oy matn ko'rinishida bo'lishi kerak" })
+  @IsNotEmpty({ message: 'Oy kiritilishi shart' })
+  // Month formati uchun regex tekshiruvi: YYYY-MM
   @Matches(/^\d{4}-(0[1-9]|1[0-2])$/, {
-    message: 'Month must be in YYYY-MM format',
+    message: "Oy 'YYYY-MM' formatida bo'lishi kerak (masalan: 2026-06)",
   })
   month: string;
 
   @ApiProperty({
-    description: 'Filter by active status',
+    description: 'Mashina faol yoki faol emasligi bo‘yicha filter',
     example: true,
     required: false,
   })
@@ -33,15 +36,15 @@ export class MonthlyStatisticsQueryDto {
     if (value === 'false' || value === false) return false;
     return value;
   })
-  @IsBoolean()
+  @IsBoolean({ message: "is_active true yoki false qiymatida bo'lishi kerak" })
   is_active?: boolean;
 
   @ApiProperty({
-    description: 'Filter by car ID (optional)',
+    description: "Mashina ID kaliti bo'yicha filter (ixtiyoriy)",
     example: 'uuid',
     required: false,
   })
   @IsOptional()
-  @IsUUID()
+  @IsUUID('4', { message: "Mashina ID si to'g'ri UUID formatida bo'lishi kerak" })
   car_id?: string;
 }

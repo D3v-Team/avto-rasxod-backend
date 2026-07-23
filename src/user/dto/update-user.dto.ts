@@ -1,19 +1,22 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString } from 'class-validator';
+import { IsOptional, IsString } from 'class-validator';
 
 export class UpdateUserDto {
   @ApiProperty({
     example: 'John Doe',
-    description: 'Foydalanuvchi to‘liq ismi',
+    description: "Foydalanuvchi to'liq ismi",
+    required: false,
   })
-  @IsString({ message: 'full_name matn (string) bo‘lishi kerak' })
-  @IsNotEmpty({ message: 'full_name bo‘sh bo‘lishi mumkin emas' })
-  full_name: string;
+  @IsOptional()
+  @IsString({ message: "To'liq ism matn ko'rinishida bo'lishi kerak" })
+  full_name?: string;
 
   @ApiProperty({
     example: 'john',
     description: 'Foydalanuvchi username manzili',
+    required: false,
   })
-  @IsNotEmpty({ message: 'username kiritilishi shart' })
-  username: string;
+  @IsOptional()
+  @IsString({ message: "Username matn ko'rinishida bo'lishi kerak" })
+  username?: string;
 }

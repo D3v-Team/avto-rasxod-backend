@@ -97,6 +97,18 @@ export class CarDailyExpenseController {
     return this.carDailyExpenseService.getYearlyStatistics(query);
   }
 
+  @Get('all-employees-and-cars-counts')
+  @ApiOperation({ summary: "Barcha xodimlar va mashinalar soni" })
+  @ApiResponse({
+    status: 200,
+    description: 'Barcha xodimlar va mashinalar soni muvaffaqiyatli olindi',
+  })
+  @ApiResponse({ status: 401, description: "Ruxsat yo'q" })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  async allEmployesAndCarsCount() {
+    return this.carDailyExpenseService.allEmployesAndCarsCount();
+  }
+
   @ApiOperation({
     summary: "Mashinaning oylik yoqilg'i jamlanmasi (oy boshiga/oxiriga balans)",
   })

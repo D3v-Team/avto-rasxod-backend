@@ -1,30 +1,33 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsUUID, IsString, IsOptional, Matches } from 'class-validator';
+import { IsUUID, IsString, IsOptional, Matches, IsNotEmpty } from 'class-validator';
 
 export class CarMonthlyReportQueryDto {
   @ApiProperty({
-    description: 'Car ID',
+    description: 'Mashina ID kaliti',
     example: 'uuid',
   })
-  @IsUUID()
+  @IsUUID('4', { message: "Mashina ID si to'g'ri UUID formatida bo'lishi kerak" })
+  @IsNotEmpty({ message: 'Mashina ID si kiritilishi shart' })
   car_id: string;
 
   @ApiProperty({
-    description: 'Month (YYYY-MM format)',
+    description: 'Oy (YYYY-MM formatida)',
     example: '2026-06',
   })
-  @IsString()
+  @IsString({ message: "Oy matn ko'rinishida bo'lishi kerak" })
+  @IsNotEmpty({ message: 'Oy kiritilishi shart' })
+  // Month formati uchun regex tekshiruvi: YYYY-MM
   @Matches(/^\d{4}-(0[1-9]|1[0-2])$/, {
-    message: 'Month must be in YYYY-MM format',
+    message: "Oy 'YYYY-MM' formatida bo'lishi kerak (masalan: 2026-06)",
   })
   month: string;
 
   @ApiProperty({
-    description: 'Filter by fuel ID (optional)',
+    description: "Yoqilg'i turi ID kaliti bo'yicha filter (ixtiyoriy)",
     example: 'uuid',
     required: false,
   })
   @IsOptional()
-  @IsUUID()
+  @IsUUID('4', { message: "Yoqilg'i turi ID si to'g'ri UUID formatida bo'lishi kerak" })
   fuel_id?: string;
 }

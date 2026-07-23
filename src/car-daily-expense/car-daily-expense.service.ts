@@ -20,6 +20,12 @@ import { MonthlyStatisticsQueryDto } from './dto/monthly-statistics-query.dto';
 import { YearlyStatisticsQueryDto } from './dto/yearly-statistics-query.dto';
 import { Car } from '../cars/models/cars.models';
 import { Fuel } from '../fuels/models/fuels.models';
+import { Employee } from '../employees/models/employee.model';
+import { normalizeName } from '../common/utils/normalize-name.util';
+
+// DIQQAT: CarDailyExpense modulida note (izoh) maydoni erkin matn bo'lgani sababli,
+// uni majburan UPPERCASE qilish noqulaylik tug'diradi. Shu sababli note maydoniga
+// normalizeName() QO'LLANILMAYDI (faqat GET search parametrida normalizeName ishlatiladi).
 
 @Injectable()
 export class CarDailyExpenseService {
@@ -28,6 +34,7 @@ export class CarDailyExpenseService {
     private readonly expenseRepo: typeof CarDailyExpense,
     @InjectModel(Car) private readonly carRepo: typeof Car,
     @InjectModel(Fuel) private readonly fuelRepo: typeof Fuel,
+    @InjectModel(Employee) private readonly employeeRepo: typeof Employee,
     @InjectModel(CarFuelNorm)
     private readonly carFuelNormRepo: typeof CarFuelNorm,
     @InjectConnection() private readonly sequelize: Sequelize,
@@ -42,6 +49,11 @@ export class CarDailyExpenseService {
         });
         if (!car) {
           throw new NotFoundException('Mashina topilmadi');
+        }
+        if (dto.date > new Date().toISOString().split('T')[0]) {
+          throw new BadRequestException(
+            "Kelgusi kunlar uchun ma'lumot kiritish mumkin emas",
+          );
         }
 
         const carFuelNorm = await this.carFuelNormRepo.findOne({
@@ -129,23 +141,34 @@ export class CarDailyExpenseService {
     page: number;
     limit: number;
     totalPages: number;
+    totals: {
+      fuel_id: string;
+      fuel_name: string;
+      fuel_unit: string;
+      total_received_amount: number;
+      total_fuel_expence: number;
+      total_mileage: number;
+      total_price_sum: number;
+    }[];
   }> {
     try {
       const {
-        page,
-        limit,
+        page = 1,
+        limit = 10,
         car_id,
         fuel_id,
         date_from,
         date_to,
         is_holiday,
         search,
-        sortBy,
-        sortOrder,
+        sortBy = 'date',
+        sortOrder = 'DESC',
       } = query;
-      const offset = (page - 1) * limit;
+      const pageNum = Number(page) || 1;
+      const limitNum = Number(limit) || 10;
+      const offset = (pageNum - 1) * limitNum;
 
-      const where: WhereOptions = {};
+      const where: WhereOptions<any> = {};
 
       if (car_id) {
         where.car_id = car_id;
@@ -171,46 +194,111 @@ export class CarDailyExpenseService {
         {
           model: Car,
           as: 'car',
+          required: false,
         },
         {
           model: Fuel,
           as: 'fuel',
+          required: false,
         },
       ];
 
       if (search) {
+        const normalizedSearch = normalizeName(search);
         include[0].where = {
           [Op.or]: [
-            { name: { [Op.iLike]: `%${search}%` } },
-            { plate_number: { [Op.iLike]: `%${search}%` } },
+            { name: { [Op.iLike]: `%${normalizedSearch}%` } },
+            { plate_number: { [Op.iLike]: `%${normalizedSearch}%` } },
           ],
         };
+        include[0].required = true;
       }
 
       const order: [string, string][] = [];
       if (sortBy) {
         order.push([sortBy, sortOrder]);
+        if (sortBy !== 'sequence_no') {
+          order.push(['sequence_no', sortOrder]);
+        }
       }
 
-      const [data, total] = await Promise.all([
+      const normalizedSearch = search ? normalizeName(search) : '';
+
+      const [data, total, totalsRaw] = await Promise.all([
         this.expenseRepo.findAll({
           where,
           offset,
-          limit,
+          limit: limitNum,
           order,
           include,
+          subQuery: false,
         }),
-        this.expenseRepo.count({ where }),
+        this.expenseRepo.count({ where, include, distinct: true }),
+        this.expenseRepo.findAll({
+          where,
+          include: [
+            {
+              model: Fuel,
+              as: 'fuel',
+              attributes: [],
+              required: false,
+            },
+            ...(search
+              ? [
+                  {
+                    model: Car,
+                    as: 'car',
+                    attributes: [],
+                    required: true,
+                    where: {
+                      [Op.or]: [
+                        { name: { [Op.iLike]: `%${normalizedSearch}%` } },
+                        { plate_number: { [Op.iLike]: `%${normalizedSearch}%` } },
+                      ],
+                    },
+                  },
+                ]
+              : []),
+          ],
+          attributes: [
+            'fuel_id',
+            [fn('MAX', col('fuel.name')), 'fuel_name'],
+            [fn('MAX', col('fuel.unit')), 'fuel_unit'],
+            [fn('SUM', col('CarDailyExpense.received_amount')), 'total_received_amount'],
+            [fn('SUM', col('CarDailyExpense.fuel_expence')), 'total_fuel_expence'],
+            [fn('SUM', col('CarDailyExpense.mileage')), 'total_mileage'],
+            [
+              literal(
+                'SUM(COALESCE("CarDailyExpense"."fuel_expence", 0) * COALESCE("fuel"."price", 0))',
+              ),
+              'total_price_sum',
+            ],
+          ],
+          group: ['fuel_id'],
+          raw: true,
+          subQuery: false,
+        }),
       ]);
 
-      const totalPages = Math.ceil(total / limit);
+      const totals = (totalsRaw as any[]).map((row) => ({
+        fuel_id: row.fuel_id,
+        fuel_name: row.fuel_name || '',
+        fuel_unit: row.fuel_unit || '',
+        total_received_amount: Number(row.total_received_amount) || 0,
+        total_fuel_expence: Number(row.total_fuel_expence) || 0,
+        total_mileage: Number(row.total_mileage) || 0,
+        total_price_sum: Number(row.total_price_sum) || 0,
+      }));
+
+      const totalPages = Math.ceil(total / limitNum) || 0;
 
       return {
         data,
         total,
-        page,
-        limit,
+        page: pageNum,
+        limit: limitNum,
         totalPages,
+        totals,
       };
     } catch (error) {
       if (error instanceof HttpException) {
@@ -272,9 +360,9 @@ export class CarDailyExpenseService {
         });
         if (!lastRecord || lastRecord.id !== record.id) {
           throw new ForbiddenException(
-            "Faqat shu mashina bo'yicha ENG OXIRGI yaratilgan rasxod yozuvini " +
+            "Faqat shu mashina bo'yicha eng oxirgi yaratilgan rasxod yozuvini " +
               "(yoqilg'i turidan qat'i nazar) tahrirlash mumkin. Avvalgi " +
-              'yozuvlar yopilgan hisoblanadi.',
+              'yozuvlar yopilgan hisoblanadi',
           );
         }
 
@@ -371,8 +459,8 @@ export class CarDailyExpenseService {
         });
         if (!lastRecord || lastRecord.id !== record.id) {
           throw new ForbiddenException(
-            "Faqat shu mashina bo'yicha ENG OXIRGI yaratilgan rasxod yozuvini " +
-              "o'chirish mumkin.",
+            "Faqat shu mashina bo'yicha eng oxirgi yaratilgan rasxod yozuvini " +
+              "o'chirish mumkin",
           );
         }
 
@@ -814,7 +902,7 @@ export class CarDailyExpenseService {
 
       const fuels = await this.fuelRepo.findAll();
 
-      const expenses = await this.expenseRepo.findAll({
+      const expenses = (await this.expenseRepo.findAll({
         where: {
           ...(car_id ? { car_id } : {}),
           date: { [Op.between]: [date_from, date_to] },
@@ -827,9 +915,13 @@ export class CarDailyExpenseService {
           [fn('SUM', col('received_amount')), 'total_received_amount'],
           [fn('SUM', col('fuel_expence')), 'total_fuel_expence'],
         ],
-        group: ['car_id', 'fuel_id', literal('EXTRACT(MONTH FROM "date")') as any],
+        group: [
+          'car_id',
+          'fuel_id',
+          literal('EXTRACT(MONTH FROM "date")') as any,
+        ],
         raw: true,
-      }) as any[];
+      })) as any[];
 
       const expensesMap = new Map<string, any[]>();
       for (const e of expenses) {
@@ -860,8 +952,12 @@ export class CarDailyExpenseService {
             );
 
             const m_mileage = monthRecord ? Number(monthRecord.total_mileage) : 0;
-            const m_received = monthRecord ? Number(monthRecord.total_received_amount) : 0;
-            const m_expence = monthRecord ? Number(monthRecord.total_fuel_expence) : 0;
+            const m_received = monthRecord
+              ? Number(monthRecord.total_received_amount)
+              : 0;
+            const m_expence = monthRecord
+              ? Number(monthRecord.total_fuel_expence)
+              : 0;
 
             yearly_total_mileage += m_mileage;
             yearly_total_received += m_received;
@@ -911,5 +1007,22 @@ export class CarDailyExpenseService {
         'Yillik statistikani olishda xatolik yuz berdi',
       );
     }
+  }
+
+  async allEmployesAndCarsCount() {
+    const [totalEmployees, totalCars] = await Promise.all([
+      this.employeeRepo.count({
+        where: {
+          is_deleted: false,
+        },
+        group: ['role'],
+      }),
+      this.carRepo.count({
+        where: {
+          is_deleted: false,
+        },
+      }),
+    ]);
+    return { totalEmployees, totalCars };
   }
 }

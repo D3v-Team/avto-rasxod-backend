@@ -3,13 +3,13 @@ import { IsNotEmpty, IsString, MinLength } from 'class-validator';
 
 export class ResetPasswordDto {
   @ApiProperty({
-    example: 'New password',
-    description: 'Xodimning yangi paroli',
+    example: 'Newpassword123',
+    description: 'Yangi parol (kamida 6 ta belgi)',
   })
-  @IsString({ message: 'new_password matn (string) bo‘lishi kerak' })
-  @IsNotEmpty({ message: 'new_password kiritilishi shart' })
+  @IsString({ message: "Yangi parol matn ko'rinishida bo'lishi kerak" })
+  @IsNotEmpty({ message: 'Yangi parol kiritilishi shart' })
   @MinLength(6, {
-    message: 'new_password kamida 6 ta belgidan iborat bo‘lishi kerak',
+    message: "Yangi parol kamida 6 ta belgidan iborat bo'lishi kerak",
   })
   new_password: string;
 }

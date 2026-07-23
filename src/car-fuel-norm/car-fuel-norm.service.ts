@@ -14,6 +14,10 @@ import { CarDailyExpense } from '../car-daily-expense/models/car-daily-expense.m
 import { CreateCarFuelNormDto } from './dto/create-car-fuel-norm.dto';
 import { UpdateCarFuelNormDto } from './dto/update-car-fuel-norm.dto';
 import { QueryCarFuelNormDto } from './dto/query-car-fuel-norm.dto';
+import { normalizeName } from '../common/utils/normalize-name.util';
+
+// DIQQAT: CarFuelNorm modulida inson kiritadigan matnli maydonlar (nom, username v.b.) yo'q,
+// faqat ID, raqamlar va FK lar mavjud bo'lgani sababli normalizeName() FAQAT GET search parametrida qo'llaniladi.
 
 @Injectable()
 export class CarFuelNormService {
@@ -70,8 +74,8 @@ export class CarFuelNormService {
   }> {
     try {
       const {
-        page,
-        limit,
+        page = 1,
+        limit = 10,
         car_id,
         fuel_id,
         search,
@@ -103,10 +107,11 @@ export class CarFuelNormService {
       ];
 
       if (search) {
+        const normalizedSearch = normalizeName(search);
         include[0].where = {
           [Op.or]: [
-            { name: { [Op.iLike]: `%${search}%` } },
-            { plate_number: { [Op.iLike]: `%${search}%` } },
+            { name: { [Op.iLike]: `%${normalizedSearch}%` } },
+            { plate_number: { [Op.iLike]: `%${normalizedSearch}%` } },
           ],
         };
       }
@@ -221,12 +226,12 @@ export class CarFuelNormService {
           "Bu norma bo'yicha rasxod tarixi mavjud, shuning uchun " +
             "o'chirib (arxivlab) bo'lmaydi. Avval mashinani boshqa " +
             "yoqilg'i normasiga o'tkazing yoki tarixiy yozuvlarni " +
-            "ko'rib chiqing.",
+            "ko'rib chiqing",
         );
       }
 
       await record.update({ is_deleted: true });
-      return { message: "Yoqilg'i normasi arxivlandi" };
+      return { message: "Yoqilg'i normasi muvaffaqiyatli arxivlandi" };
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
@@ -249,11 +254,13 @@ export class CarFuelNormService {
         );
       }
       await carFuelNorm.update({ is_deleted: false });
-      return { message: 'Norma tiklandi' };
+      return { message: 'Norma muvaffaqiyatli tiklandi' };
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
       console.error('Restore carFuelNorm error:', error);
-      throw new InternalServerErrorException('Tiklashda xatolik yuz berdi');
+      throw new InternalServerErrorException(
+        'Normani tiklashda xatolik yuz berdi',
+      );
     }
   }
 }
