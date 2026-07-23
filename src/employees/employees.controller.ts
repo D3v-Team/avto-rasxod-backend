@@ -13,6 +13,7 @@ import {
   ApiBearerAuth,
   ApiOperation,
   ApiQuery,
+  ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
 import { EmployeesService } from './employees.service';
@@ -86,5 +87,18 @@ export class EmployeesController {
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.employeesService.remove(id);
+  }
+
+  @ApiOperation({ summary: "Xodimni tiklash" })
+  @ApiResponse({
+    status: 200,
+    description: "Xodim muvaffaqiyatli tiklandi",
+  })
+  @ApiResponse({ status: 404, description: 'Xodim topilmadi' })
+  @ApiResponse({ status: 401, description: "Ruxsat yo'q" })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @Patch('restore/:id')
+  restore(@Param('id') id: string) {
+    return this.employeesService.restore(id);
   }
 }

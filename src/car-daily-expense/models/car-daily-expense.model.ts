@@ -19,6 +19,7 @@ interface CarDailyExpenseAttr {
   mileage: number;
   received_amount: number;
   fuel_expence: number;
+  fuel_price_at_time: number;
   balance_after: number;
   is_holiday: boolean;
   note?: string;
@@ -111,6 +112,12 @@ export class CarDailyExpense extends Model<
     allowNull: false,
   })
   declare fuel_expence: number;
+
+  @Column({
+    type: DataType.FLOAT,
+    allowNull: false,
+  })
+  declare fuel_price_at_time: number;
 
   @Column({
     type: DataType.FLOAT,

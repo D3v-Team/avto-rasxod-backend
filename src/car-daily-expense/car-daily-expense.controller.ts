@@ -9,7 +9,9 @@ import {
   Query,
   UseGuards,
   ParseUUIDPipe,
+  Res,
 } from '@nestjs/common';
+import { Response } from 'express';
 import {
   ApiTags,
   ApiOperation,
@@ -26,6 +28,8 @@ import { CarMonthlyReportQueryDto } from './dto/car-monthly-report-query.dto';
 import { MonthlyStatisticsQueryDto } from './dto/monthly-statistics-query.dto';
 import { YearlyStatisticsQueryDto } from './dto/yearly-statistics-query.dto';
 import { OrganizationMonthlyReportQueryDto } from './dto/organization-monthly-report-query.dto';
+import { OrganizationMonthlyReportExcelQueryDto } from './dto/organization-monthly-report-excel-query.dto';
+import { CarMonthlyReportExcelQueryDto } from './dto/car-monthly-report-excel-query.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { UserRole } from '../common/enums/user-role.enum';
@@ -131,6 +135,87 @@ export class CarDailyExpenseController {
     @Query() query: OrganizationMonthlyReportQueryDto,
   ) {
     return this.carDailyExpenseService.getOrganizationMonthlyReport(query);
+  }
+
+  @ApiOperation({
+    summary: "Tashkilot oylik hisobotini Excel formatida yuklab olish",
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Excel fayl muvaffaqiyatli yuklandi',
+  })
+  @ApiResponse({ status: 400, description: "Noto'g'ri yil yoki oy" })
+  @ApiResponse({ status: 401, description: "Ruxsat yo'q" })
+  @ApiQuery({ name: 'year', required: true, example: 2026 })
+  @ApiQuery({ name: 'month', required: true, example: 6 })
+  @ApiQuery({ name: 'is_active', required: false, type: Boolean })
+  @ApiQuery({ name: 'search', required: false, type: String })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @Get('organization-monthly-report-excel')
+  async downloadOrganizationMonthlyReportExcel(
+    @Query() query: OrganizationMonthlyReportExcelQueryDto,
+    @Res() res: Response,
+  ) {
+    try {
+      const buffer =
+        await this.carDailyExpenseService.generateOrganizationMonthlyReportExcel(
+          query,
+        );
+      const fileName = `tashkilot-oylik-hisobot-${query.year}-${String(query.month).padStart(2, '0')}.xlsx`;
+      res.set({
+        'Content-Type':
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'Content-Disposition': `attachment; filename="${fileName}"`,
+      });
+      res.send(buffer);
+    } catch (error: any) {
+      const status = error.status || error.getStatus?.() || 500;
+      const message =
+        error.response?.message ||
+        error.message ||
+        'Excel hisobotini yaratishda xatolik yuz berdi';
+      res.status(status).json({ statusCode: status, message });
+    }
+  }
+
+  @ApiOperation({
+    summary:
+      "Bitta mashinaning kunlik yoqilg'i jurnalini Excel formatida yuklab olish",
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Excel fayl muvaffaqiyatli yuklandi',
+  })
+  @ApiResponse({ status: 404, description: 'Mashina yoki yoqilg‘i topilmadi' })
+  @ApiResponse({ status: 401, description: "Ruxsat yo'q" })
+  @ApiQuery({ name: 'car_id', required: true })
+  @ApiQuery({ name: 'fuel_id', required: false })
+  @ApiQuery({ name: 'year', required: true, example: 2026 })
+  @ApiQuery({ name: 'month', required: true, example: 6 })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @Get('car-monthly-report-excel')
+  async downloadCarMonthlyReportExcel(
+    @Query() query: CarMonthlyReportExcelQueryDto,
+    @Res() res: Response,
+  ) {
+    try {
+      const buffer =
+        await this.carDailyExpenseService.generateCarMonthlyReportExcel(query);
+      const fileName = `mashina-jurnal-${query.year}-${String(query.month).padStart(2, '0')}.xlsx`;
+      res.set({
+        'Content-Type':
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'Content-Disposition': `attachment; filename="${fileName}"`,
+      });
+      res.send(buffer);
+    } catch (error: any) {
+      const status = error.status || error.getStatus?.() || 500;
+      const message =
+        error.response?.message ||
+        error.message ||
+        'Excel hisobotini yaratishda xatolik yuz berdi';
+      res.status(status).json({ statusCode: status, message });
+    }
   }
 
   @ApiOperation({
