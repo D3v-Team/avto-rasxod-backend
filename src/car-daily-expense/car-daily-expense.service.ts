@@ -38,7 +38,7 @@ export class CarDailyExpenseService {
     @InjectModel(CarFuelNorm)
     private readonly carFuelNormRepo: typeof CarFuelNorm,
     @InjectConnection() private readonly sequelize: Sequelize,
-  ) {}
+  ) { }
 
   async create(dto: CreateCarDailyExpenseDto): Promise<CarDailyExpense> {
     try {
@@ -245,19 +245,19 @@ export class CarDailyExpenseService {
             },
             ...(search
               ? [
-                  {
-                    model: Car,
-                    as: 'car',
-                    attributes: [],
-                    required: true,
-                    where: {
-                      [Op.or]: [
-                        { name: { [Op.iLike]: `%${normalizedSearch}%` } },
-                        { plate_number: { [Op.iLike]: `%${normalizedSearch}%` } },
-                      ],
-                    },
+                {
+                  model: Car,
+                  as: 'car',
+                  attributes: [],
+                  required: true,
+                  where: {
+                    [Op.or]: [
+                      { name: { [Op.iLike]: `%${normalizedSearch}%` } },
+                      { plate_number: { [Op.iLike]: `%${normalizedSearch}%` } },
+                    ],
                   },
-                ]
+                },
+              ]
               : []),
           ],
           attributes: [
@@ -269,7 +269,7 @@ export class CarDailyExpenseService {
             [fn('SUM', col('CarDailyExpense.mileage')), 'total_mileage'],
             [
               literal(
-                'SUM(COALESCE("CarDailyExpense"."fuel_expence", 0) * COALESCE("fuel"."price", 0))',
+                'SUM(COALESCE("CarDailyExpense"."received_amount", 0) * COALESCE("fuel"."price", 0))',
               ),
               'total_price_sum',
             ],
@@ -361,8 +361,8 @@ export class CarDailyExpenseService {
         if (!lastRecord || lastRecord.id !== record.id) {
           throw new ForbiddenException(
             "Faqat shu mashina bo'yicha eng oxirgi yaratilgan rasxod yozuvini " +
-              "(yoqilg'i turidan qat'i nazar) tahrirlash mumkin. Avvalgi " +
-              'yozuvlar yopilgan hisoblanadi',
+            "(yoqilg'i turidan qat'i nazar) tahrirlash mumkin. Avvalgi " +
+            'yozuvlar yopilgan hisoblanadi',
           );
         }
 
@@ -460,7 +460,7 @@ export class CarDailyExpenseService {
         if (!lastRecord || lastRecord.id !== record.id) {
           throw new ForbiddenException(
             "Faqat shu mashina bo'yicha eng oxirgi yaratilgan rasxod yozuvini " +
-              "o'chirish mumkin",
+            "o'chirish mumkin",
           );
         }
 
@@ -944,6 +944,7 @@ export class CarDailyExpenseService {
           let yearly_total_mileage = 0;
           let yearly_total_received = 0;
           let yearly_total_expence = 0;
+          let yearly_total_price = 0;
 
           const monthly_breakdown = Array.from({ length: 12 }, (_, i) => {
             const monthNum = i + 1;
@@ -958,16 +959,19 @@ export class CarDailyExpenseService {
             const m_expence = monthRecord
               ? Number(monthRecord.total_fuel_expence)
               : 0;
+            const m_reaceved_price = m_received * fuel.price;
 
             yearly_total_mileage += m_mileage;
             yearly_total_received += m_received;
             yearly_total_expence += m_expence;
+            yearly_total_price += m_reaceved_price;
 
             return {
               month: monthNum,
               total_mileage: m_mileage,
               total_received_amount: m_received,
               total_fuel_expence: m_expence,
+              total_reaceved_price: m_reaceved_price,
             };
           });
 
@@ -979,6 +983,7 @@ export class CarDailyExpenseService {
               total_mileage: yearly_total_mileage,
               total_received_amount: yearly_total_received,
               total_fuel_expence: yearly_total_expence,
+              total_reaceved_price: yearly_total_price,
             },
             monthly_breakdown,
           });
