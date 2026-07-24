@@ -144,7 +144,7 @@ export class CarDailyExpenseService {
             mileage,
             received_amount,
             fuel_expence,
-            fuel_price_at_time: fuel.price, // ✅ Yaratilish paytidagi narx snapshoti
+            fuel_price_at_time: fuel.price,
             balance_after,
             is_holiday: dto.is_holiday ?? false,
             note: dto.note,
@@ -803,9 +803,9 @@ export class CarDailyExpenseService {
         const dayExpenses = expensesByDate[date] || [];
 
         if (dayExpenses.length > 0) {
-          const firstExpenseForDay = dayExpenses[0]; // Saralangan ro'yxatdan eng birinchisi
-          const lastExpenseForDay = dayExpenses[dayExpenses.length - 1]; // Eng oxirgisi
-          const dailyMileage = dayExpenses.reduce((sum, e) => sum + (e.mileage || 0), 0);
+          const firstExpenseForDay = dayExpenses[0];
+          const lastExpenseForDay = dayExpenses[dayExpenses.length - 1];
+          const dailyMileage = dayExpenses.reduce((sum, e) => sum + (e.mileage || 0), 0); // FAQAT shu kun, kumulativ EMAS
 
           days.push({
             date,
