@@ -272,7 +272,7 @@ export async function generateCarMonthlyReportWorkbook(
       { label: `Получено за месяц (${fuel.name}):`, val: s.total_received ?? totalsByFuel[fuel.id].received },
       { label: `Расход за месяц (${fuel.name}):`, val: s.total_expence ?? totalsByFuel[fuel.id].expence },
       { label: `Сальдо на конец месяца (${fuel.name}):`, val: s.end_balance ?? runningBalances[fuel.id] },
-      { label: `Стоимость топлива за месяц (${fuel.name}):`, val: ((s.total_received ?? 0)) * fuel.price },
+      { label: `Стоимость топлива за месяц (${fuel.name}):`, val: s.total_received_price ?? 0 }, // ✅ Fuel.price o'rniga saqlangan narx summasi ishlatiladi
     ];
 
     saldoItems.forEach((item) => {
