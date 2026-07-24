@@ -17,7 +17,7 @@ interface CarDailyExpenseAttr {
   odometer_start: number;
   odometer_end: number;
   mileage: number;
-  received_amount: number;
+  received_amount?: number;
   fuel_expence: number;
   fuel_price_at_time: number;
   balance_after: number;
@@ -102,10 +102,10 @@ export class CarDailyExpense extends Model<
 
   @Column({
     type: DataType.FLOAT,
-    allowNull: false,
+    allowNull: true,
     defaultValue: 0,
   })
-  declare received_amount: number;
+  declare received_amount?: number;
 
   @Column({
     type: DataType.FLOAT,

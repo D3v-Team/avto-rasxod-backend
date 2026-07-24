@@ -32,7 +32,6 @@ export class CarService {
 
   async create(dto: CreateCarDto): Promise<Car> {
     try {
-      // Normalizatsiya name va plate_number maydonlariga qo'llanadi
       const normalizedDto = {
         ...dto,
         name: normalizeName(dto.name),
@@ -57,7 +56,6 @@ export class CarService {
         }
       }
 
-      // Unikal tekshiruv normalizatsiya qilingan plate_number bo'yicha bajariladi
       const existingCar = await this.carRepo.findOne({
         where: { plate_number: normalizedDto.plate_number },
       });

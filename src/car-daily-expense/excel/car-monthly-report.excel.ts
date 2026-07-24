@@ -111,25 +111,18 @@ export async function generateCarMonthlyReportWorkbook(
   let grandTotalMileage = 0;
   let grandTotalPurchaseSum = 0;
 
-  // Group records by date (YYYY-MM-DD)
-  const recordsByDate = new Map<string, any[]>();
-  records.forEach((r: any) => {
-    if (!recordsByDate.has(r.date)) {
-      recordsByDate.set(r.date, []);
-    }
-    recordsByDate.get(r.date)!.push(r);
-  });
-
   let currentRowIndex = 4;
+  const days = reportData.days || [];
 
   for (let day = 1; day <= daysInMonth; day++) {
     const dayStr = String(day).padStart(2, '0');
     const monthStr = String(month).padStart(2, '0');
-    const fullDate = `${year}-${monthStr}-${dayStr}`;
     const displayDate = `${dayStr}.${monthStr}.${year}`;
+    const fullDate = `${year}-${monthStr}-${dayStr}`;
 
-    const dayRecords = recordsByDate.get(fullDate) || [];
-    const isHoliday = dayRecords.some((r) => r.is_holiday);
+    const dayData = days.find((d: any) => d.date === fullDate);
+    const dayRecords = dayData ? dayData.expenses : [];
+    const isHoliday = dayRecords.some((r: any) => r.is_holiday);
 
     const row = worksheet.getRow(currentRowIndex);
     row.height = 22;
@@ -137,18 +130,15 @@ export async function generateCarMonthlyReportWorkbook(
     row.getCell(1).value = displayDate;
 
     // Odometer start / end / mileage for day
-    if (dayRecords.length > 0) {
-      const firstRec = dayRecords[0];
-      const lastRec = dayRecords[dayRecords.length - 1];
-      let dayMileage = 0;
-      dayRecords.forEach((r) => {
-        dayMileage += Number(r.mileage) || 0;
-      });
-
-      row.getCell(2).value = Number(firstRec.odometer_start) || 0;
-      row.getCell(3).value = Number(lastRec.odometer_end) || 0;
-      row.getCell(4).value = dayMileage;
-      grandTotalMileage += dayMileage;
+    if (dayData && dayData.odometer_start !== null && dayData.odometer_end !== null) {
+      row.getCell(2).value = Number(dayData.odometer_start) || 0;
+      row.getCell(3).value = Number(dayData.odometer_end) || 0;
+      row.getCell(4).value = Number(dayData.mileage) || 0;
+      
+      // FAQAT yozuv bo'lgan kunlardagi mileni qo'shamiz (grandTotal ikki marta qo'shilmasligi uchun, garchi bo'sh kunlarda 0 bo'lsa ham)
+      if (dayRecords.length > 0) {
+        grandTotalMileage += Number(dayData.mileage) || 0;
+      }
     } else {
       row.getCell(2).value = '';
       row.getCell(3).value = '';
