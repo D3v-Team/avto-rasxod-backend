@@ -16,6 +16,7 @@ import { CreateCarDto } from './dto/create-car.dto';
 import { UpdateCarDto } from './dto/update-car.dto';
 import { QueryCarDto } from './dto/query-car.dto';
 import { normalizeName } from '../common/utils/normalize-name.util';
+import { Fuel } from '../fuels/models/fuels.models';
 
 @Injectable()
 export class CarService {
@@ -27,7 +28,7 @@ export class CarService {
     @InjectModel(CarDailyExpense)
     private readonly carDailyExpenseRepo: typeof CarDailyExpense,
     @InjectConnection() private readonly sequelize: Sequelize,
-  ) {}
+  ) { }
 
   async create(dto: CreateCarDto): Promise<Car> {
     try {
@@ -160,6 +161,14 @@ export class CarService {
               as: 'car_fuel_norm',
               attributes: ['current_balance'],
               required: false,
+              include: [
+                {
+                  model: Fuel,
+                  as: 'fuel',
+                  attributes: ['name'],
+                  required: false,
+                },
+              ],
             },
           ],
         }),
