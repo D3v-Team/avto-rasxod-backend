@@ -6,7 +6,7 @@ import {
   HttpException,
 } from '@nestjs/common';
 import { InjectModel, InjectConnection } from '@nestjs/sequelize';
-import { Op } from 'sequelize';
+import { FindOptions, Op } from 'sequelize';
 import { Sequelize } from 'sequelize';
 import { Car } from './models/cars.models';
 import { Employee } from '../employees/models/employee.model';
@@ -127,11 +127,12 @@ export class CarService {
         order.push([sortBy, sortOrder]);
       }
 
+      // is_deleted FAQAT scope orqali boshqariladi, where ga yozilmaydi —
+      // aks holda defaultScope (is_deleted:false) bilan ziddiyat chiqadi
       let scope: string | undefined = undefined;
       if (is_deleted === true) {
         scope = 'onlyDeleted';
       }
-
       const repo = scope ? this.carRepo.scope(scope) : this.carRepo;
 
       const [data, total] = await Promise.all([
@@ -140,7 +141,7 @@ export class CarService {
           offset,
           limit,
           order,
-          subQuery: false,
+          distinct: true,
           include: [
             {
               model: Employee,
@@ -157,7 +158,7 @@ export class CarService {
             {
               model: CarFuelNorm,
               as: 'car_fuel_norm',
-              attributes: ['current_balance'],
+              attributes: ['id', 'norm_per_100km', 'current_balance'],
               required: false,
               include: [
                 {
@@ -169,7 +170,7 @@ export class CarService {
               ],
             },
           ],
-        }),
+        } as any),
         repo.count({ where }),
       ]);
 
