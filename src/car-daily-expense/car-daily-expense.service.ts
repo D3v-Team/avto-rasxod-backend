@@ -61,6 +61,23 @@ export class CarDailyExpenseService {
             "Kelgusi kunlar uchun ma'lumot kiritish mumkin emas",
           );
         }
+        const lastRecord = await this.expenseRepo.findOne({
+          where: { car_id: dto.car_id },
+          order: [['sequence_no', 'DESC']],
+          transaction: t,
+          lock: t.LOCK.UPDATE,
+        });
+
+        if (lastRecord) {
+          const newDate = new Date(dto.date);
+          const lastDate = new Date(lastRecord.date);
+          if (newDate < lastDate) {
+            throw new BadRequestException(
+              "Kiritilayotgan sana avvalgi kiritilgan sanadan kichik bo'lishi mumkin emas",
+            );
+          }
+        }
+
 
         const carFuelNorm = await this.carFuelNormRepo.findOne({
           where: { car_id: dto.car_id, fuel_id: dto.fuel_id },
@@ -100,9 +117,19 @@ export class CarDailyExpenseService {
         }
 
         const mileage = odometer_end - odometer_start;
+        const received_amount = dto.received_amount || 0;
+
+        if (mileage === 0 && received_amount === 0) {
+          throw new BadRequestException(
+            "Kamida bittasi kiritilishi shart: yoqilg'i quyilgan miqdori " +
+            "yoki bosib o'tilgan masofa. Ikkalasi ham 0 bo'lgan yozuv " +
+            "yaratib bo'lmaydi",
+          );
+        }
+
         const fuel_expence = (mileage * carFuelNorm.norm_per_100km) / 100;
         const balance_after =
-          carFuelNorm.current_balance + dto.received_amount - fuel_expence;
+          carFuelNorm.current_balance + received_amount - fuel_expence;
 
         const nextSequenceNo = car.last_sequence_no + 1;
 
@@ -115,7 +142,7 @@ export class CarDailyExpenseService {
             odometer_start,
             odometer_end,
             mileage,
-            received_amount: dto.received_amount,
+            received_amount,
             fuel_expence,
             fuel_price_at_time: fuel.price, // ✅ Yaratilish paytidagi narx snapshoti
             balance_after,
@@ -424,6 +451,14 @@ export class CarDailyExpenseService {
         }
         const newMileage = newOdometerEnd - record.odometer_start;
         const newReceivedAmount = dto.received_amount ?? record.received_amount;
+
+        if (newMileage === 0 && newReceivedAmount === 0) {
+          throw new BadRequestException(
+            "Kamida bittasi bo'lishi shart: yoqilg'i quyilgan miqdori " +
+            "yoki bosib o'tilgan masofa. Ikkalasi ham 0 bo'lishi mumkin emas",
+          );
+        }
+
         const newFuelExpence = (newMileage * carFuelNorm.norm_per_100km) / 100;
 
         const previousRecord = await this.expenseRepo.findOne({
@@ -667,7 +702,13 @@ export class CarDailyExpenseService {
   async getCarMonthlyReport(query: CarMonthlyReportQueryDto): Promise<{
     car: { id: string; name: string; plate_number: string };
     month: string;
-    days: Array<{ date: string; expenses: any[] }>;
+    days: Array<{
+      date: string;
+      expenses: any[];
+      odometer_start: number | null;
+      odometer_end: number | null;
+      mileage: number | null;
+    }>;
     totals: Array<{
       fuel_id: string;
       fuel_name: string;
@@ -715,9 +756,7 @@ export class CarDailyExpenseService {
         ],
       });
 
-      const days: Array<{ date: string; expenses: any[] }> = [];
       const expensesByDate: Record<string, any[]> = {};
-
       records.forEach((record) => {
         if (!expensesByDate[record.date]) {
           expensesByDate[record.date] = [];
@@ -733,15 +772,68 @@ export class CarDailyExpenseService {
           balance_after: record.balance_after,
           is_holiday: record.is_holiday,
           note: record.note,
+          odometer_start: record.odometer_start,
+          odometer_end: record.odometer_end,
         });
       });
 
+      const previousRecord = await this.expenseRepo.findOne({
+        where: {
+          car_id: query.car_id,
+          date: { [Op.lt]: startDate },
+        },
+        order: [['sequence_no', 'DESC']],
+      });
+      const initialOdometer = previousRecord
+        ? previousRecord.odometer_end
+        : null;
+
+      let runningOdometer = initialOdometer;
+
+      const days: Array<{
+        date: string;
+        expenses: any[];
+        odometer_start: number | null;
+        odometer_end: number | null;
+        mileage: number | null;
+      }> = [];
+
       for (let day = 1; day <= daysInMonth; day++) {
         const date = `${query.month}-${day.toString().padStart(2, '0')}`;
-        days.push({
-          date,
-          expenses: expensesByDate[date] || [],
-        });
+        const dayExpenses = expensesByDate[date] || [];
+
+        if (dayExpenses.length > 0) {
+          const firstExpenseForDay = dayExpenses[0]; // Saralangan ro'yxatdan eng birinchisi
+          const lastExpenseForDay = dayExpenses[dayExpenses.length - 1]; // Eng oxirgisi
+          const dailyMileage = dayExpenses.reduce((sum, e) => sum + (e.mileage || 0), 0);
+
+          days.push({
+            date,
+            expenses: dayExpenses,
+            odometer_start: firstExpenseForDay.odometer_start,
+            odometer_end: lastExpenseForDay.odometer_end,
+            mileage: dailyMileage,
+          });
+          runningOdometer = lastExpenseForDay.odometer_end;
+        } else {
+          if (runningOdometer !== null) {
+            days.push({
+              date,
+              expenses: [],
+              odometer_start: runningOdometer,
+              odometer_end: runningOdometer,
+              mileage: 0,
+            });
+          } else {
+            days.push({
+              date,
+              expenses: [],
+              odometer_start: null,
+              odometer_end: null,
+              mileage: null,
+            });
+          }
+        }
       }
 
       const totalsByFuel: Record<
@@ -1368,6 +1460,7 @@ export class CarDailyExpenseService {
       },
     };
   }
+
   private groupByResponsibleEmployee(carsFlatData: any[]) {
     const groupsMap = new Map<string, any>();
     const unassignedGroupKey = 'unassigned';
@@ -1394,7 +1487,7 @@ export class CarDailyExpenseService {
 
       group.group_total.total_mileage += (Number(carItem.total_mileage) || 0);
       group.group_total.total_sum += (Number(carItem.total_sum) || 0);
-      
+
       group.group_total.holiday.km += (Number(carItem.holiday?.km) || 0);
       group.group_total.holiday.amount += (Number(carItem.holiday?.amount) || 0);
       group.group_total.holiday.sum += (Number(carItem.holiday?.sum) || 0);
@@ -1623,6 +1716,12 @@ export class CarDailyExpenseService {
         summaryByFuel[fuel.id].total_received_price = fuelReceivedPrice;
       }
 
+      const jsonReport = await this.getCarMonthlyReport({
+        car_id,
+        fuel_id,
+        month: `${year}-${String(month).padStart(2, '0')}`,
+      });
+
       const reportData = {
         car: {
           id: car.id,
@@ -1637,7 +1736,7 @@ export class CarDailyExpenseService {
         })),
         year,
         month,
-        records,
+        days: jsonReport.days, // DRY: JSON endpointdan foydalanildi
         summaryByFuel,
       };
 

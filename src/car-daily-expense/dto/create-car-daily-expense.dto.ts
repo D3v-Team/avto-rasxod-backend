@@ -47,13 +47,15 @@ export class CreateCarDailyExpenseDto {
   odometer_end: number;
 
   @ApiProperty({
-    description: "Bugun quyilgan yoqilg'i miqdori",
+    required: false,
+    description: "Agar bugun yoqilg'i quyilmagan bo'lsa, kiritmasa ham bo'ladi (0 deb qabul qilinadi)",
     example: 20,
     minimum: 0,
   })
+  @IsOptional()
   @IsNumber({}, { message: "Quyilgan yoqilg'i miqdori raqam bo'lishi kerak" })
-  @Min(0, { message: "Quyilgan yoqilg'i miqdori kamida 0 bo'lishi kerak" })
-  received_amount: number;
+  @Min(0, { message: "Quyilgan yoqilg'i miqdori manfiy bo'lishi mumkin emas" })
+  received_amount?: number;
 
   @ApiProperty({
     description: 'Bayram kuni',
