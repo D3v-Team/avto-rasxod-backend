@@ -28,6 +28,7 @@ import { Fuel } from '../fuels/models/fuels.models';
 import { Employee } from '../employees/models/employee.model';
 import { normalizeName } from '../common/utils/normalize-name.util';
 
+
 // DIQQAT: CarDailyExpense modulida note (izoh) maydoni erkin matn bo'lgani sababli,
 // uni majburan UPPERCASE qilish noqulaylik tug'diradi. Shu sababli note maydoniga
 // normalizeName() QO'LLANILMAYDI (faqat GET search parametrida normalizeName ishlatiladi).
@@ -1367,16 +1368,98 @@ export class CarDailyExpenseService {
       },
     };
   }
+  private groupByResponsibleEmployee(carsFlatData: any[]) {
+    const groupsMap = new Map<string, any>();
+    const unassignedGroupKey = 'unassigned';
+
+    carsFlatData.forEach((carItem: any) => {
+      const emp = carItem.car?.responsible_employee;
+      const key = emp ? emp.id : unassignedGroupKey;
+
+      if (!groupsMap.has(key)) {
+        groupsMap.set(key, {
+          responsible_employee: emp || null,
+          cars: [],
+          group_total: {
+            total_mileage: 0,
+            fuelsMap: new Map<string, any>(),
+            total_sum: 0,
+            holiday: { km: 0, amount: 0, sum: 0 },
+          },
+        });
+      }
+
+      const group = groupsMap.get(key);
+      group.cars.push(carItem);
+
+      group.group_total.total_mileage += (Number(carItem.total_mileage) || 0);
+      group.group_total.total_sum += (Number(carItem.total_sum) || 0);
+      
+      group.group_total.holiday.km += (Number(carItem.holiday?.km) || 0);
+      group.group_total.holiday.amount += (Number(carItem.holiday?.amount) || 0);
+      group.group_total.holiday.sum += (Number(carItem.holiday?.sum) || 0);
+
+      if (Array.isArray(carItem.fuels)) {
+        carItem.fuels.forEach((f: any) => {
+          if (!group.group_total.fuelsMap.has(f.fuel_id)) {
+            group.group_total.fuelsMap.set(f.fuel_id, {
+              fuel_id: f.fuel_id,
+              fuel_name: f.fuel_name,
+              fuel_unit: f.fuel_unit,
+              total_consumed_amount: 0,
+              total_consumed_sum: 0,
+            });
+          }
+          const gf = group.group_total.fuelsMap.get(f.fuel_id);
+          gf.total_consumed_amount += (Number(f.consumed_amount) || 0);
+          gf.total_consumed_sum += (Number(f.consumed_sum) || 0);
+        });
+      }
+    });
+
+    const groups = Array.from(groupsMap.values()).map(g => ({
+      responsible_employee: g.responsible_employee,
+      cars: g.cars,
+      group_total: {
+        total_mileage: g.group_total.total_mileage,
+        fuels: Array.from(g.group_total.fuelsMap.values()),
+        total_sum: g.group_total.total_sum,
+        holiday: g.group_total.holiday,
+      }
+    }));
+
+    // Sorting groups (optional but good for consistency), e.g. unassigned last or alphabetical
+    groups.sort((a, b) => {
+      if (!a.responsible_employee) return 1;
+      if (!b.responsible_employee) return -1;
+      return (a.responsible_employee.full_name || '').localeCompare(b.responsible_employee.full_name || '');
+    });
+
+    return groups;
+  }
 
   async getOrganizationMonthlyReport(
     query: OrganizationMonthlyReportQueryDto,
   ) {
     try {
-      return await this.collectOrganizationMonthlyData(query, {
+      const flatDataResult = await this.collectOrganizationMonthlyData(query, {
         paginate: true,
         page: query.page,
         limit: query.limit,
       });
+
+      const groups = this.groupByResponsibleEmployee(flatDataResult.data);
+
+      return {
+        year: flatDataResult.year,
+        month: flatDataResult.month,
+        page: flatDataResult.page,
+        limit: flatDataResult.limit,
+        total: flatDataResult.total,
+        totalPages: flatDataResult.totalPages,
+        groups, // data o'rniga groups qaytariladi
+        grand_total: flatDataResult.grand_total,
+      };
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
@@ -1392,10 +1475,20 @@ export class CarDailyExpenseService {
     query: OrganizationMonthlyReportExcelQueryDto,
   ): Promise<Buffer> {
     try {
-      const data = await this.collectOrganizationMonthlyData(query, {
-        paginate: false,
+      const flatDataResult = await this.collectOrganizationMonthlyData(query, {
+        paginate: false, // Excel uchun barcha ma'lumotlar olinadi
       });
-      return await generateOrganizationReportWorkbook(data);
+
+      const groups = this.groupByResponsibleEmployee(flatDataResult.data);
+
+      const reportData = {
+        year: flatDataResult.year,
+        month: flatDataResult.month,
+        groups,
+        grand_total: flatDataResult.grand_total,
+      };
+
+      return await generateOrganizationReportWorkbook(reportData);
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
@@ -1476,6 +1569,7 @@ export class CarDailyExpenseService {
           total_received: number;
           total_expence: number;
           end_balance: number;
+          total_received_price: number;
         }
       > = {};
 
@@ -1513,7 +1607,20 @@ export class CarDailyExpenseService {
           total_received: totalReceived,
           total_expence: totalExpence,
           end_balance: endBalance,
+          total_received_price: 0, // Calculate this below
         };
+      }
+
+      // Calculate total_received_price properly based on fuel_price_at_time
+      for (const fuel of fuelsToDisplay) {
+        let fuelReceivedPrice = 0;
+        const fuelRecords = records.filter((r) => r.fuel_id === fuel.id);
+        fuelRecords.forEach((r) => {
+          const rReceived = Number(r.received_amount) || 0;
+          const rPrice = Number(r.fuel_price_at_time) || fuel.price || 0; // ✅ Yozuv yaratilgan paytdagi narx ishlatiladi
+          fuelReceivedPrice += (rReceived * rPrice);
+        });
+        summaryByFuel[fuel.id].total_received_price = fuelReceivedPrice;
       }
 
       const reportData = {
