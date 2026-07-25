@@ -15,6 +15,7 @@ interface CarAttr {
   plate_number: string;
   responsible_employee_id?: string;
   driver_id?: string;
+  initial_speedometer: number;
   speedometer: number;
   last_sequence_no: number;
   is_active?: boolean;
@@ -91,6 +92,13 @@ export class Car extends Model<Car, CarAttr> {
 
   @HasMany(() => CarFuelNorm, { as: 'car_fuel_norm' })
   declare car_fuel_norm: CarFuelNorm[];
+
+  @Column({
+    type: DataType.FLOAT,
+    allowNull: false,
+    defaultValue: 0,
+  })
+  declare initial_speedometer: number;
 
   @Column({
     type: DataType.FLOAT,

@@ -10,7 +10,7 @@ import {
   Min,
   MaxLength,
 } from 'class-validator';
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 
 export class CreateCarDailyExpenseDto {
   @ApiProperty({
@@ -38,13 +38,15 @@ export class CreateCarDailyExpenseDto {
   date: string;
 
   @ApiProperty({
-    description: "Kun oxiridagi spidometr ko'rsatkichi",
-    example: 15000,
+    description: "Bosib o'tilgan masofa (km)",
+    example: 80,
     minimum: 0,
   })
-  @IsNumber({}, { message: "Kun oxiridagi spidometr ko'rsatkichi raqam bo'lishi kerak" })
-  @Min(0, { message: "Spidometr ko'rsatkichi kamida 0 bo'lishi kerak" })
-  odometer_end: number;
+  @IsNotEmpty({ message: "Bosib o'tilgan masofa kiritilishi shart" })
+  @Type(() => Number)
+  @IsNumber({}, { message: "Bosib o'tilgan masofa raqam bo'lishi kerak" })
+  @Min(0, { message: "Bosib o'tilgan masofa manfiy bo'lishi mumkin emas" })
+  mileage: number;
 
   @ApiProperty({
     required: false,

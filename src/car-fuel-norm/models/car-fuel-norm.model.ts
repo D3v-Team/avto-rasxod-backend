@@ -13,6 +13,7 @@ interface CarFuelNormAttr {
   car_id: string;
   fuel_id: string;
   norm_per_100km: number;
+  initial_balance: number;
   current_balance: number;
   is_deleted?: boolean;
 }
@@ -72,6 +73,13 @@ export class CarFuelNorm extends Model<CarFuelNorm, CarFuelNormAttr> {
     allowNull: false,
   })
   declare norm_per_100km: number;
+
+  @Column({
+    type: DataType.FLOAT,
+    allowNull: false,
+    defaultValue: 0,
+  })
+  declare initial_balance: number;
 
   @Column({
     type: DataType.FLOAT,

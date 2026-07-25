@@ -8,6 +8,7 @@ import {
 } from 'sequelize-typescript';
 import { Car } from '../../cars/models/cars.models';
 import { Fuel } from '../../fuels/models/fuels.models';
+import { Employee } from '../../employees/models/employee.model';
 
 interface CarDailyExpenseAttr {
   car_id: string;
@@ -23,6 +24,9 @@ interface CarDailyExpenseAttr {
   balance_after: number;
   is_holiday: boolean;
   note?: string;
+  responsible_employee_id_at_time: string | null;
+  driver_id_at_time: string | null;
+  norm_per_100km_at_time: number;
 }
 
 @Table({
@@ -137,4 +141,30 @@ export class CarDailyExpense extends Model<
     allowNull: true,
   })
   declare note?: string;
+
+  @Column({ type: DataType.FLOAT, allowNull: false })
+  declare norm_per_100km_at_time: number;
+
+
+  // O'sha vaqtdagi mas'ul xodim
+  @ForeignKey(() => Employee)
+  @Column({ type: DataType.UUID, allowNull: true })
+  declare responsible_employee_id_at_time: string | null;
+
+  @BelongsTo(() => Employee, {
+    foreignKey: 'responsible_employee_id_at_time',
+    as: 'responsible_employee_at_time',
+  })
+  declare responsible_employee_at_time: Employee | null;
+
+  // O'sha vaqtdagi haydovchi
+  @ForeignKey(() => Employee)
+  @Column({ type: DataType.UUID, allowNull: true })
+  declare driver_id_at_time: string | null;
+
+  @BelongsTo(() => Employee, {
+    foreignKey: 'driver_id_at_time',
+    as: 'driver_at_time',
+  })
+  declare driver_at_time: Employee | null;
 }

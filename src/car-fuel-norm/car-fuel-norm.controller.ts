@@ -21,6 +21,7 @@ import { CarFuelNormService } from './car-fuel-norm.service';
 import { CreateCarFuelNormDto } from './dto/create-car-fuel-norm.dto';
 import { UpdateCarFuelNormDto } from './dto/update-car-fuel-norm.dto';
 import { QueryCarFuelNormDto } from './dto/query-car-fuel-norm.dto';
+import { ChangeCarFuelNormDto } from './dto/change-car-fuel-norm.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { UserRole } from '../common/enums/user-role.enum';
@@ -87,6 +88,19 @@ export class CarFuelNormController {
     @Body() updateCarFuelNormDto: UpdateCarFuelNormDto,
   ) {
     return this.carFuelNormService.update(id, updateCarFuelNormDto);
+  }
+
+  @ApiOperation({ summary: 'Norma miqdorini va tarixini o\'zgartirish' })
+  @ApiResponse({ status: 200, description: 'Norma muvaffaqiyatli o\'zgartirildi' })
+  @ApiResponse({ status: 404, description: 'Norma topilmadi' })
+  @ApiResponse({ status: 401, description: 'Ruxsat yo\'q' })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @Patch(':id/change-norm')
+  changeNorm(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() changeCarFuelNormDto: ChangeCarFuelNormDto,
+  ) {
+    return this.carFuelNormService.changeNorm(id, changeCarFuelNormDto);
   }
 
   @ApiOperation({ summary: "ID bo'yicha norma o'chirish" })
