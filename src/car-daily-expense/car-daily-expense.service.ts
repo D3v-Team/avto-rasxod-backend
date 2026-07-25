@@ -8,7 +8,7 @@ import {
   HttpException,
 } from '@nestjs/common';
 import { InjectModel, InjectConnection } from '@nestjs/sequelize';
-import { IncludeOptions, Op, WhereOptions, fn, col, literal } from 'sequelize';
+import { IncludeOptions, Op, WhereOptions, fn, col, literal, Transaction } from 'sequelize';
 import { Sequelize } from 'sequelize';
 import { CarDailyExpense } from './models/car-daily-expense.model';
 import { CarFuelNorm } from '../car-fuel-norm/models/car-fuel-norm.model';
@@ -26,6 +26,7 @@ import { generateCarMonthlyReportWorkbook } from './excel/car-monthly-report.exc
 import { Car } from '../cars/models/cars.models';
 import { Fuel } from '../fuels/models/fuels.models';
 import { Employee } from '../employees/models/employee.model';
+import { CarFuelNormHistoryService } from '../car-fuel-norm-history/car-fuel-norm-history.service';
 import { normalizeName } from '../common/utils/normalize-name.util';
 
 
@@ -43,6 +44,7 @@ export class CarDailyExpenseService {
     @InjectModel(Employee) private readonly employeeRepo: typeof Employee,
     @InjectModel(CarFuelNorm)
     private readonly carFuelNormRepo: typeof CarFuelNorm,
+    private readonly carFuelNormHistoryService: CarFuelNormHistoryService,
     @InjectConnection() private readonly sequelize: Sequelize,
   ) { }
 
@@ -61,24 +63,6 @@ export class CarDailyExpenseService {
             "Kelgusi kunlar uchun ma'lumot kiritish mumkin emas",
           );
         }
-        const lastRecord = await this.expenseRepo.findOne({
-          where: { car_id: dto.car_id },
-          order: [['sequence_no', 'DESC']],
-          transaction: t,
-          lock: t.LOCK.UPDATE,
-        });
-
-        if (lastRecord) {
-          const newDate = new Date(dto.date);
-          const lastDate = new Date(lastRecord.date);
-          if (newDate < lastDate) {
-            throw new BadRequestException(
-              "Kiritilayotgan sana avvalgi kiritilgan sanadan kichik bo'lishi mumkin emas",
-            );
-          }
-        }
-
-
         const carFuelNorm = await this.carFuelNormRepo.findOne({
           where: { car_id: dto.car_id, fuel_id: dto.fuel_id },
           transaction: t,
@@ -107,59 +91,39 @@ export class CarDailyExpenseService {
           throw new NotFoundException("Yoqilg'i turi topilmadi");
         }
 
-        const odometer_start = car.speedometer;
-        const odometer_end = dto.odometer_end;
-
-        if (odometer_end < odometer_start) {
-          throw new BadRequestException(
-            "Kun oxiridagi spidometr qiymati joriy spidometrdan kichik bo'lishi mumkin emas",
-          );
-        }
-
-        const mileage = odometer_end - odometer_start;
+        const mileage = dto.mileage;
         const received_amount = dto.received_amount || 0;
 
         if (mileage === 0 && received_amount === 0) {
           throw new BadRequestException(
-            "Kamida bittasi kiritilishi shart: yoqilg'i quyilgan miqdori " +
-            "yoki bosib o'tilgan masofa. Ikkalasi ham 0 bo'lgan yozuv " +
-            "yaratib bo'lmaydi",
+            "Kamida bittasi kiritilishi shart: yoqilg'i quyilgan miqdori yoki bosib o'tilgan masofa. Ikkalasi ham 0 bo'lgan yozuv yaratib bo'lmaydi",
           );
         }
-
-        const fuel_expence = (mileage * carFuelNorm.norm_per_100km) / 100;
-        const balance_after =
-          carFuelNorm.current_balance + received_amount - fuel_expence;
-
-        const nextSequenceNo = car.last_sequence_no + 1;
 
         const expense = await this.expenseRepo.create(
           {
             car_id: dto.car_id,
             fuel_id: dto.fuel_id,
             date: dto.date,
-            sequence_no: nextSequenceNo,
-            odometer_start,
-            odometer_end,
+            sequence_no: 0, // recalculateCarChain tomonidan yangilanadi
+            odometer_start: 0, // recalculateCarChain tomonidan yangilanadi
+            odometer_end: 0, // recalculateCarChain tomonidan yangilanadi
             mileage,
             received_amount,
-            fuel_expence,
+            fuel_expence: 0, // recalculateCarChain tomonidan yangilanadi
             fuel_price_at_time: fuel.price,
-            balance_after,
+            balance_after: 0, // recalculateCarChain tomonidan yangilanadi
             is_holiday: dto.is_holiday ?? false,
             note: dto.note,
+            responsible_employee_id_at_time: car.responsible_employee_id ?? null,
+            driver_id_at_time: car.driver_id ?? null,
+            norm_per_100km_at_time: 0, // recalculateCarChain tomonidan yangilanadi
           },
           { transaction: t },
         );
 
-        await car.update(
-          { speedometer: odometer_end, last_sequence_no: nextSequenceNo },
-          { transaction: t },
-        );
-        await carFuelNorm.update(
-          { current_balance: balance_after },
-          { transaction: t },
-        );
+        // Yangi yozuv qo'shilgandan keyin butun zanjirni qayta hisoblash
+        await this.recalculateCarChain(car.id, t);
 
         return expense.id;
       });
@@ -241,6 +205,18 @@ export class CarDailyExpenseService {
         {
           model: Fuel,
           as: 'fuel',
+          required: false,
+        },
+        {
+          model: Employee,
+          as: 'responsible_employee_at_time',
+          attributes: ['id', 'full_name'],
+          required: false,
+        },
+        {
+          model: Employee,
+          as: 'driver_at_time',
+          attributes: ['id', 'full_name'],
           required: false,
         },
       ];
@@ -384,6 +360,18 @@ export class CarDailyExpenseService {
             model: Fuel,
             as: 'fuel',
           },
+          {
+            model: Employee,
+            as: 'responsible_employee_at_time',
+            attributes: ['id', 'full_name'],
+            required: false,
+          },
+          {
+            model: Employee,
+            as: 'driver_at_time',
+            attributes: ['id', 'full_name'],
+            required: false,
+          },
         ],
       });
 
@@ -414,89 +402,44 @@ export class CarDailyExpenseService {
           throw new NotFoundException(`ID ${id} bo'yicha xarajat topilmadi`);
         }
 
-        const lastRecord = await this.expenseRepo.findOne({
-          where: { car_id: record.car_id },
-          order: [['sequence_no', 'DESC']],
-          transaction: t,
-        });
-        if (!lastRecord || lastRecord.id !== record.id) {
-          throw new ForbiddenException(
-            "Faqat shu mashina bo'yicha eng oxirgi yaratilgan rasxod yozuvini " +
-            "(yoqilg'i turidan qat'i nazar) tahrirlash mumkin. Avvalgi " +
-            'yozuvlar yopilgan hisoblanadi',
-          );
+        // Agar fuel_id yoki date o'zgarsa, uniqueness check
+        const newFuelId = dto.fuel_id ?? record.fuel_id;
+        const newDate = dto.date ?? record.date;
+
+        if (newFuelId !== record.fuel_id || newDate !== record.date) {
+          const existing = await this.expenseRepo.findOne({
+            where: { car_id: record.car_id, fuel_id: newFuelId, date: newDate },
+            transaction: t,
+          });
+          if (existing && existing.id !== record.id) {
+            throw new ConflictException(
+              "Bu mashina va yoqilg'i turi uchun shu sana allaqachon kiritilgan",
+            );
+          }
         }
 
-        const car = await this.carRepo.findByPk(record.car_id, {
-          transaction: t,
-          lock: t.LOCK.UPDATE,
-        });
-
-        const carFuelNorm = await this.carFuelNormRepo.findOne({
-          where: { car_id: record.car_id, fuel_id: record.fuel_id },
-          transaction: t,
-          lock: t.LOCK.UPDATE,
-        });
-        if (!carFuelNorm) {
-          throw new NotFoundException(
-            "Bu mashina uchun shu yoqilg'i turida norma belgilanmagan",
-          );
-        }
-
-        const newOdometerEnd = dto.odometer_end ?? record.odometer_end;
-        if (newOdometerEnd < record.odometer_start) {
-          throw new BadRequestException(
-            "Spidometr qiymati boshlang'ich qiymatdan kichik bo'lishi mumkin emas",
-          );
-        }
-        const newMileage = newOdometerEnd - record.odometer_start;
+        const newMileage = dto.mileage ?? record.mileage;
         const newReceivedAmount = dto.received_amount ?? record.received_amount;
 
         if (newMileage === 0 && newReceivedAmount === 0) {
           throw new BadRequestException(
-            "Kamida bittasi bo'lishi shart: yoqilg'i quyilgan miqdori " +
-            "yoki bosib o'tilgan masofa. Ikkalasi ham 0 bo'lishi mumkin emas",
+            "Kamida bittasi bo'lishi shart: yoqilg'i quyilgan miqdori yoki bosib o'tilgan masofa. Ikkalasi ham 0 bo'lishi mumkin emas",
           );
         }
 
-        const newFuelExpence = (newMileage * carFuelNorm.norm_per_100km) / 100;
-
-        const previousRecord = await this.expenseRepo.findOne({
-          where: {
-            car_id: record.car_id,
-            fuel_id: record.fuel_id,
-            sequence_no: { [Op.lt]: record.sequence_no },
-          },
-          order: [['sequence_no', 'DESC']],
-          transaction: t,
-        });
-        const previousBalance = previousRecord
-          ? previousRecord.balance_after
-          : 0;
-        const newBalanceAfter =
-          previousBalance + newReceivedAmount - newFuelExpence;
-
         await record.update(
           {
-            odometer_end: newOdometerEnd,
+            fuel_id: newFuelId,
+            date: newDate,
             mileage: newMileage,
             received_amount: newReceivedAmount,
-            fuel_expence: newFuelExpence,
-            balance_after: newBalanceAfter,
             is_holiday: dto.is_holiday ?? record.is_holiday,
             note: dto.note ?? record.note,
           },
           { transaction: t },
         );
 
-        await carFuelNorm.update(
-          { current_balance: newBalanceAfter },
-          { transaction: t },
-        );
-
-        if (newOdometerEnd !== record.odometer_end && car) {
-          await car.update({ speedometer: newOdometerEnd }, { transaction: t });
-        }
+        await this.recalculateCarChain(record.car_id, t);
 
         return record.id;
       });
@@ -521,60 +464,9 @@ export class CarDailyExpenseService {
           throw new NotFoundException(`ID ${id} bo'yicha xarajat topilmadi`);
         }
 
-        const lastRecord = await this.expenseRepo.findOne({
-          where: { car_id: record.car_id },
-          order: [['sequence_no', 'DESC']],
-          transaction: t,
-        });
-        if (!lastRecord || lastRecord.id !== record.id) {
-          throw new ForbiddenException(
-            "Faqat shu mashina bo'yicha eng oxirgi yaratilgan rasxod yozuvini " +
-            "o'chirish mumkin",
-          );
-        }
-
-        const car = await this.carRepo.findByPk(record.car_id, {
-          transaction: t,
-          lock: t.LOCK.UPDATE,
-        });
-
-        const carFuelNorm = await this.carFuelNormRepo.findOne({
-          where: { car_id: record.car_id, fuel_id: record.fuel_id },
-          transaction: t,
-          lock: t.LOCK.UPDATE,
-        });
-
-        const previousRecord = await this.expenseRepo.findOne({
-          where: {
-            car_id: record.car_id,
-            fuel_id: record.fuel_id,
-            sequence_no: { [Op.lt]: record.sequence_no },
-          },
-          order: [['sequence_no', 'DESC']],
-          transaction: t,
-        });
-        const previousBalance = previousRecord
-          ? previousRecord.balance_after
-          : 0;
-
-        if (carFuelNorm) {
-          await carFuelNorm.update(
-            { current_balance: previousBalance },
-            { transaction: t },
-          );
-        }
-
-        if (car) {
-          await car.update(
-            {
-              speedometer: record.odometer_start,
-              last_sequence_no: record.sequence_no - 1,
-            },
-            { transaction: t },
-          );
-        }
-
+        const carId = record.car_id;
         await record.destroy({ transaction: t });
+        await this.recalculateCarChain(carId, t);
       });
 
       return { message: "Kunlik xarajat muvaffaqiyatli o'chirildi" };
@@ -626,6 +518,18 @@ export class CarDailyExpenseService {
           {
             model: Fuel,
             as: 'fuel',
+          },
+          {
+            model: Employee,
+            as: 'responsible_employee_at_time',
+            attributes: ['id', 'full_name'],
+            required: false,
+          },
+          {
+            model: Employee,
+            as: 'driver_at_time',
+            attributes: ['id', 'full_name'],
+            required: false,
           },
         ],
       });
@@ -753,6 +657,18 @@ export class CarDailyExpenseService {
             model: Fuel,
             as: 'fuel',
           },
+          {
+            model: Employee,
+            as: 'responsible_employee_at_time',
+            attributes: ['id', 'full_name'],
+            required: false,
+          },
+          {
+            model: Employee,
+            as: 'driver_at_time',
+            attributes: ['id', 'full_name'],
+            required: false,
+          },
         ],
       });
 
@@ -774,6 +690,8 @@ export class CarDailyExpenseService {
           note: record.note,
           odometer_start: record.odometer_start,
           odometer_end: record.odometer_end,
+          responsible_employee_at_time: (record as any).responsible_employee_at_time,
+          driver_at_time: (record as any).driver_at_time,
         });
       });
 
@@ -1235,6 +1153,20 @@ export class CarDailyExpenseService {
           ['fuel_id', 'ASC'],
           ['date', 'ASC'],
           ['sequence_no', 'ASC'],
+        ],
+        include: [
+          {
+            model: Employee,
+            as: 'responsible_employee_at_time',
+            attributes: ['id', 'full_name'],
+            required: false,
+          },
+          {
+            model: Employee,
+            as: 'driver_at_time',
+            attributes: ['id', 'full_name'],
+            required: false,
+          },
         ],
       });
 
@@ -1749,6 +1681,82 @@ export class CarDailyExpenseService {
       throw new InternalServerErrorException(
         'Mashina Excel hisobotini generatsiya qilishda xatolik yuz berdi',
       );
+    }
+  }
+  private async recalculateCarChain(carId: string, t: Transaction): Promise<void> {
+    const records = await this.expenseRepo.findAll({
+      where: { car_id: carId },
+      order: [['date', 'ASC'], ['createdAt', 'ASC']],
+      transaction: t,
+      lock: t.LOCK.UPDATE,
+    });
+
+    const car = await this.carRepo.findByPk(carId, { transaction: t, lock: t.LOCK.UPDATE });
+    if (!car) throw new NotFoundException('Mashina topilmadi');
+
+    let runningOdometer = car.initial_speedometer;
+    let sequenceCounter = 0;
+
+    const carFuelNorms = await this.carFuelNormRepo.findAll({
+      where: { car_id: carId },
+      transaction: t,
+      lock: t.LOCK.UPDATE,
+    });
+
+    const balanceMap = new Map<string, number>();
+    const normIdMap = new Map<string, string>();
+
+    for (const cfn of carFuelNorms) {
+      balanceMap.set(cfn.fuel_id, cfn.initial_balance);
+      normIdMap.set(cfn.fuel_id, cfn.id);
+    }
+
+    for (const record of records) {
+      sequenceCounter++;
+      // 1. Odometer qayta hisoblanadi
+      const odometer_start = runningOdometer;
+      const odometer_end = odometer_start + record.mileage;
+
+      const normId = normIdMap.get(record.fuel_id);
+      let normPerKm = 0;
+      if (normId) {
+        // 2. O'sha kungi haqiqiy norma (tarixdan) olinadi
+        normPerKm = await this.carFuelNormHistoryService.getNormForDate(
+          normId,
+          record.date,
+          t,
+        );
+      }
+
+      // 3. Yoqilg'i xarajati yangi normadan kelib chiqib hisoblanadi
+      const fuel_expence = (record.mileage * normPerKm) / 100;
+
+      // 4. Balans qayta yoziladi
+      const prevBalance = balanceMap.has(record.fuel_id) ? balanceMap.get(record.fuel_id)! : 0;
+      const balance_after = prevBalance + (record.received_amount ?? 0) - fuel_expence;
+      balanceMap.set(record.fuel_id, balance_after);
+
+      await record.update({
+        sequence_no: sequenceCounter,
+        odometer_start,
+        odometer_end,
+        fuel_expence,
+        norm_per_100km_at_time: normPerKm,
+        balance_after,
+      }, { transaction: t });
+
+      runningOdometer = odometer_end;
+    }
+
+    // 5. Yakuniy holat saqlanadi
+    await car.update({
+      speedometer: runningOdometer,
+      last_sequence_no: sequenceCounter,
+    }, { transaction: t });
+
+    for (const cfn of carFuelNorms) {
+      const finalBalance = balanceMap.has(cfn.fuel_id) ? balanceMap.get(cfn.fuel_id)! : cfn.initial_balance;
+      await cfn.update({ current_balance: finalBalance }, { transaction: t });
     }
   }
 }

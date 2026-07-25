@@ -6,10 +6,16 @@ import { CarFuelNorm } from './models/car-fuel-norm.model';
 import { Car } from '../cars/models/cars.models';
 import { Fuel } from '../fuels/models/fuels.models';
 import { CarDailyExpense } from '../car-daily-expense/models/car-daily-expense.model';
+import { CarFuelNormHistoryModule } from '../car-fuel-norm-history/car-fuel-norm-history.module';
+import { forwardRef } from '@nestjs/common';
 
 @Module({
-  imports: [SequelizeModule.forFeature([CarFuelNorm, Car, Fuel, CarDailyExpense])],
+  imports: [
+    SequelizeModule.forFeature([CarFuelNorm, Car, Fuel, CarDailyExpense]),
+    forwardRef(() => CarFuelNormHistoryModule),
+  ],
   controllers: [CarFuelNormController],
   providers: [CarFuelNormService],
+  exports: [CarFuelNormService],
 })
-export class CarFuelNormModule {}
+export class CarFuelNormModule { }
