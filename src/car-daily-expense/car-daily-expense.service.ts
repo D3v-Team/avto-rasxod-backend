@@ -700,11 +700,14 @@ export class CarDailyExpenseService {
           car_id: query.car_id,
           date: { [Op.lt]: startDate },
         },
-        order: [['sequence_no', 'DESC']],
+        order: [
+          ['date', 'DESC'],
+          ['sequence_no', 'DESC'],
+        ],
       });
       const initialOdometer = previousRecord
         ? previousRecord.odometer_end
-        : null;
+        : car.initial_speedometer;
 
       let runningOdometer = initialOdometer;
 
@@ -1143,7 +1146,7 @@ export class CarDailyExpenseService {
     let carsData: any[] = [];
 
     if (carIds.length > 0) {
-      const [expenses, carFuelNorms, previousRecordsList] = await Promise.all([
+      const [expenses, carFuelNorms, previousRecordsList, previousOdometerList] = await Promise.all([
         this.expenseRepo.findAll({
           where: {
             car_id: carIds,
@@ -1184,12 +1187,26 @@ export class CarDailyExpenseService {
         `, {
           replacements: { carIds, startDate },
           type: QueryTypes.SELECT,
+        }),
+        this.sequelize.query(`
+          SELECT DISTINCT ON (car_id) car_id, odometer_end
+          FROM car_daily_expenses
+          WHERE car_id IN (:carIds) AND date < :startDate
+          ORDER BY car_id, date DESC, sequence_no DESC
+        `, {
+          replacements: { carIds, startDate },
+          type: QueryTypes.SELECT,
         })
       ]);
 
       const previousRecordsMap = new Map<string, number>();
       (previousRecordsList as any[]).forEach(row => {
         previousRecordsMap.set(`${row.car_id}|${row.fuel_id}`, Number(row.balance_after) || 0);
+      });
+
+      const previousOdometerMap = new Map<string, number>();
+      (previousOdometerList as any[]).forEach(row => {
+        previousOdometerMap.set(row.car_id, Number(row.odometer_end) || 0);
       });
 
       const normsByCar = new Map<string, CarFuelNorm[]>();
@@ -1240,6 +1257,27 @@ export class CarDailyExpenseService {
           amount: 0,
           sum: 0,
         };
+
+        let carLastRecord: CarDailyExpense | null = null;
+        if (fuelGroup) {
+          fuelGroup.forEach((records) => {
+            records.forEach(r => {
+              if (!carLastRecord) {
+                carLastRecord = r;
+              } else if (r.date > carLastRecord.date || (r.date === carLastRecord.date && r.sequence_no > carLastRecord.sequence_no)) {
+                carLastRecord = r;
+              }
+            });
+          });
+        }
+
+        const start_speedometer = previousOdometerMap.has(car.id)
+          ? previousOdometerMap.get(car.id)
+          : (Number(car.initial_speedometer) || 0);
+
+        const end_speedometer = carLastRecord
+          ? Number(carLastRecord.odometer_end)
+          : start_speedometer;
 
         let carTotalMileage = 0;
         let carTotalSum = 0;
@@ -1304,6 +1342,8 @@ export class CarDailyExpenseService {
               : null,
             driver: car.driver ? { full_name: car.driver.full_name } : null,
           },
+          start_speedometer,
+          end_speedometer,
           total_mileage: carTotalMileage,
           fuels: fuelsResult,
           total_sum: carTotalSum,
