@@ -731,29 +731,19 @@ export class CarDailyExpenseService {
           days.push({
             date,
             expenses: dayExpenses,
-            odometer_start: firstExpenseForDay.odometer_start,
+            odometer_start: runningOdometer,
             odometer_end: lastExpenseForDay.odometer_end,
             mileage: dailyMileage,
           });
           runningOdometer = lastExpenseForDay.odometer_end;
         } else {
-          if (runningOdometer !== null) {
-            days.push({
-              date,
-              expenses: [],
-              odometer_start: runningOdometer,
-              odometer_end: runningOdometer,
-              mileage: 0,
-            });
-          } else {
-            days.push({
-              date,
-              expenses: [],
-              odometer_start: null,
-              odometer_end: null,
-              mileage: null,
-            });
-          }
+          days.push({
+      date,
+      expenses: [],
+      odometer_start: runningOdometer,
+      odometer_end: runningOdometer,
+      mileage: 0,
+    });
         }
       }
 

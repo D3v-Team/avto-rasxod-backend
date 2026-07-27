@@ -32,11 +32,15 @@ export class CarService {
 
   async create(dto: CreateCarDto): Promise<Car> {
     try {
-      const normalizedDto = {
+      const normalizedDto: any = {
         ...dto,
         name: normalizeName(dto.name),
         plate_number: normalizeName(dto.plate_number),
       };
+
+      if (dto.speedometer !== undefined) {
+        normalizedDto.initial_speedometer = dto.speedometer;
+      }
 
       if (normalizedDto.responsible_employee_id) {
         const responsibleEmployee = await this.employeeRepo.findByPk(
@@ -245,6 +249,11 @@ export class CarService {
       }
       if (dto.plate_number !== undefined) {
         normalizedDto.plate_number = normalizeName(dto.plate_number);
+      }
+      if (dto.speedometer !== undefined) {
+        // Asosiy spidometr o'zgarganda initial_speedometer ni ham yangilaymiz,
+        // chunki UI faqat bitta spidometr maydonini yuboradi
+        normalizedDto.initial_speedometer = dto.speedometer;
       }
 
       // Unikal tekshiruv normalizatsiya qilingan plate_number bo'yicha bajariladi
