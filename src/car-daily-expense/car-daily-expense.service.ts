@@ -8,7 +8,7 @@ import {
   HttpException,
 } from '@nestjs/common';
 import { InjectModel, InjectConnection } from '@nestjs/sequelize';
-import { IncludeOptions, Op, WhereOptions, fn, col, literal, Transaction } from 'sequelize';
+import { IncludeOptions, Op, WhereOptions, fn, col, literal, Transaction, QueryTypes } from 'sequelize';
 import { Sequelize } from 'sequelize';
 import { CarDailyExpense } from './models/car-daily-expense.model';
 import { CarFuelNorm } from '../car-fuel-norm/models/car-fuel-norm.model';
@@ -1143,31 +1143,61 @@ export class CarDailyExpenseService {
     let carsData: any[] = [];
 
     if (carIds.length > 0) {
-      const expenses = await this.expenseRepo.findAll({
-        where: {
-          car_id: carIds,
-          date: { [Op.between]: [startDate, endDate] },
-        },
-        order: [
-          ['car_id', 'ASC'],
-          ['fuel_id', 'ASC'],
-          ['date', 'ASC'],
-          ['sequence_no', 'ASC'],
-        ],
-        include: [
-          {
-            model: Employee,
-            as: 'responsible_employee_at_time',
-            attributes: ['id', 'full_name'],
-            required: false,
+      const [expenses, carFuelNorms, previousRecordsList] = await Promise.all([
+        this.expenseRepo.findAll({
+          where: {
+            car_id: carIds,
+            date: { [Op.between]: [startDate, endDate] },
           },
-          {
-            model: Employee,
-            as: 'driver_at_time',
-            attributes: ['id', 'full_name'],
-            required: false,
+          order: [
+            ['car_id', 'ASC'],
+            ['fuel_id', 'ASC'],
+            ['date', 'ASC'],
+            ['sequence_no', 'ASC'],
+          ],
+          include: [
+            {
+              model: Employee,
+              as: 'responsible_employee_at_time',
+              attributes: ['id', 'full_name'],
+              required: false,
+            },
+            {
+              model: Employee,
+              as: 'driver_at_time',
+              attributes: ['id', 'full_name'],
+              required: false,
+            },
+          ],
+        }),
+        this.carFuelNormRepo.findAll({
+          where: {
+            car_id: carIds,
+            is_deleted: false,
           },
-        ],
+        }),
+        this.sequelize.query(`
+          SELECT DISTINCT ON (car_id, fuel_id) car_id, fuel_id, balance_after
+          FROM car_daily_expenses
+          WHERE car_id IN (:carIds) AND date < :startDate
+          ORDER BY car_id, fuel_id, date DESC, sequence_no DESC
+        `, {
+          replacements: { carIds, startDate },
+          type: QueryTypes.SELECT,
+        })
+      ]);
+
+      const previousRecordsMap = new Map<string, number>();
+      (previousRecordsList as any[]).forEach(row => {
+        previousRecordsMap.set(`${row.car_id}|${row.fuel_id}`, Number(row.balance_after) || 0);
+      });
+
+      const normsByCar = new Map<string, CarFuelNorm[]>();
+      carFuelNorms.forEach(norm => {
+        if (!normsByCar.has(norm.car_id)) {
+          normsByCar.set(norm.car_id, []);
+        }
+        normsByCar.get(norm.car_id)!.push(norm);
       });
 
       const expensesByCarAndFuel = new Map<
@@ -1204,6 +1234,7 @@ export class CarDailyExpenseService {
 
       carsData = selectedCars.map((car) => {
         const fuelGroup = expensesByCarAndFuel.get(car.id);
+        const carNorms = normsByCar.get(car.id) || [];
         const carHoliday = holidayByCar.get(car.id) || {
           km: 0,
           amount: 0,
@@ -1214,12 +1245,18 @@ export class CarDailyExpenseService {
         let carTotalSum = 0;
         const fuelsResult: any[] = [];
 
-        if (fuelGroup) {
-          fuelGroup.forEach((records, fuelId) => {
-            const fuel = fuelMap.get(fuelId);
+        // faoliyatsiz fuel tushib qolmasligi uchun CarFuelNorm ro'yxati orqali aylanib o'tamiz
+        carNorms.forEach(norm => {
+          const fuelId = norm.fuel_id;
+          const fuel = fuelMap.get(fuelId);
+          const records = fuelGroup?.get(fuelId) || [];
 
-            let consumedAmount = 0;
-            let consumedSum = 0;
+          let consumedAmount = 0;
+          let consumedSum = 0;
+          let startBalance = 0;
+          let endBalance = 0;
+
+          if (records.length > 0) {
             records.forEach((r) => {
               const rAmount = Number(r.fuel_expence) || 0;
               // ✅ Har bir yozuvning saqlangan fuel_price_at_time narxi bo'yicha ko'paytiriladi
@@ -1234,24 +1271,28 @@ export class CarDailyExpenseService {
             const firstRec = records[0];
             const lastRec = records[records.length - 1];
 
-            const startBalance =
-              Number(firstRec.balance_after) -
-              Number(firstRec.received_amount) +
-              Number(firstRec.fuel_expence);
+            startBalance =
+              (Number(firstRec.balance_after) || 0) -
+              (Number(firstRec.received_amount) || 0) +
+              (Number(firstRec.fuel_expence) || 0);
 
-            const endBalance = Number(lastRec.balance_after) || 0;
+            endBalance = Number(lastRec.balance_after) || 0;
+          } else {
+            const prevBalance = previousRecordsMap.get(`${car.id}|${fuelId}`);
+            startBalance = prevBalance !== undefined ? prevBalance : (Number(norm.initial_balance) || 0);
+            endBalance = startBalance;
+          }
 
-            fuelsResult.push({
-              fuel_id: fuelId,
-              fuel_name: fuel?.name || '',
-              fuel_unit: fuel?.unit || '',
-              start_balance: startBalance,
-              consumed_amount: consumedAmount,
-              consumed_sum: consumedSum,
-              end_balance: endBalance,
-            });
+          fuelsResult.push({
+            fuel_id: fuelId,
+            fuel_name: fuel?.name || '',
+            fuel_unit: fuel?.unit || '',
+            start_balance: startBalance,
+            consumed_amount: consumedAmount,
+            consumed_sum: consumedSum,
+            end_balance: endBalance,
           });
-        }
+        });
 
         return {
           car: {
@@ -1683,7 +1724,8 @@ export class CarDailyExpenseService {
       );
     }
   }
-  private async recalculateCarChain(carId: string, t: Transaction): Promise<void> {
+
+  async recalculateCarChain(carId: string, t: Transaction): Promise<void> {
     const records = await this.expenseRepo.findAll({
       where: { car_id: carId },
       order: [['date', 'ASC'], ['createdAt', 'ASC']],

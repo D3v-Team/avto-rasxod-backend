@@ -5,6 +5,7 @@ import {
   IsPositive,
   IsOptional,
   IsNotEmpty,
+  IsDateString,
 } from 'class-validator';
 
 export class CreateCarFuelNormDto {
@@ -41,4 +42,9 @@ export class CreateCarFuelNormDto {
   @IsOptional()
   @IsNumber({}, { message: "Joriy balans raqam bo'lishi kerak" })
   current_balance?: number = 0;
+
+  @IsOptional()
+  @IsDateString({}, { message: "Amal qilish sanasi to'g'ri formatda bo'lishi kerak" })
+  @ApiProperty({ required: false, description: "Norma qaysi sanadan boshlab amal qiladi (berilmasa, bugungi sana ishlatiladi)" })
+  effective_from?: string;
 }

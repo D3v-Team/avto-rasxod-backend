@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { SequelizeModule } from '@nestjs/sequelize';
 import { CarDailyExpenseService } from './car-daily-expense.service';
 import { CarDailyExpenseController } from './car-daily-expense.controller';
@@ -13,10 +13,11 @@ import { CarFuelNormHistoryModule } from '../car-fuel-norm-history/car-fuel-norm
 @Module({
   imports: [
     SequelizeModule.forFeature([CarDailyExpense, Car, Fuel, CarFuelNorm, Employee]),
-    CarFuelNormModule,
+    forwardRef(() => CarFuelNormModule),
     CarFuelNormHistoryModule,
   ],
   controllers: [CarDailyExpenseController],
   providers: [CarDailyExpenseService],
+  exports: [CarDailyExpenseService],
 })
 export class CarDailyExpenseModule { }

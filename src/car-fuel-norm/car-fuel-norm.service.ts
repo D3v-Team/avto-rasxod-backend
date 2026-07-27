@@ -5,15 +5,19 @@ import {
   InternalServerErrorException,
   HttpException,
   BadRequestException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectModel, InjectConnection } from '@nestjs/sequelize';
 import { IncludeOptions, Op, WhereOptions, Transaction } from 'sequelize';
 import { Sequelize } from 'sequelize-typescript';
 import { CarFuelNorm } from './models/car-fuel-norm.model';
 import { CarFuelNormHistoryService } from '../car-fuel-norm-history/car-fuel-norm-history.service';
+import { CarFuelNormHistory } from '../car-fuel-norm-history/models/car-fuel-norm-history.model';
 import { Car } from '../cars/models/cars.models';
 import { Fuel } from '../fuels/models/fuels.models';
 import { CarDailyExpense } from '../car-daily-expense/models/car-daily-expense.model';
+import { CarDailyExpenseService } from '../car-daily-expense/car-daily-expense.service';
 import { CreateCarFuelNormDto } from './dto/create-car-fuel-norm.dto';
 import { UpdateCarFuelNormDto } from './dto/update-car-fuel-norm.dto';
 import { QueryCarFuelNormDto } from './dto/query-car-fuel-norm.dto';
@@ -33,6 +37,8 @@ export class CarFuelNormService {
     @InjectModel(CarDailyExpense)
     private readonly carDailyExpenseRepo: typeof CarDailyExpense,
     private readonly carFuelNormHistoryService: CarFuelNormHistoryService,
+    @Inject(forwardRef(() => CarDailyExpenseService))
+    private readonly carDailyExpenseService: CarDailyExpenseService,
     @InjectConnection() private readonly sequelize: Sequelize,
   ) { }
 
@@ -48,11 +54,25 @@ export class CarFuelNormService {
         throw new NotFoundException("Yoqilg'i turi topilmadi");
       }
 
-      const existingNorm = await this.carFuelNormRepo.scope('withDeleted').findOne({
-        where: { car_id: dto.car_id, fuel_id: dto.fuel_id },
-      });
+      const effectiveFrom =
+        dto.effective_from ?? new Date().toISOString().split('T')[0];
 
-      const carFuelNorm = await this.sequelize.transaction(async (t) => {
+      const today = new Date().toISOString().split('T')[0];
+      if (effectiveFrom > today) {
+        throw new BadRequestException(
+          "Norma amal qilish sanasi kelajakka tegishli bo'lishi mumkin emas",
+        );
+      }
+
+      return await this.sequelize.transaction(async (t) => {
+        const existingNorm = await this.carFuelNormRepo
+          .scope('withDeleted')
+          .findOne({
+            where: { car_id: dto.car_id, fuel_id: dto.fuel_id },
+            transaction: t,
+            lock: t.LOCK.UPDATE,
+          });
+
         if (existingNorm) {
           if (!existingNorm.is_deleted) {
             throw new ConflictException(
@@ -60,31 +80,51 @@ export class CarFuelNormService {
             );
           }
 
-          await existingNorm.update({
-            is_deleted: false,
-            norm_per_100km: dto.norm_per_100km,
-            current_balance: dto.current_balance ?? existingNorm.current_balance,
-            initial_balance: existingNorm.initial_balance ?? 0,
-          }, { transaction: t });
+          // Soft-deleted normani tiklash + TO'G'RI tarix algoritmi orqali yangi davr qo'shish
+          await existingNorm.update(
+            { is_deleted: false },
+            { transaction: t },
+          );
 
-          const today = new Date().toISOString().split('T')[0];
-          await this.carFuelNormHistoryService.closeActiveHistory(existingNorm.id, today, t);
-          await this.carFuelNormHistoryService.createInitialHistory(existingNorm.id, dto.norm_per_100km, today, t);
+          await this.insertNormHistoryEntry(
+            existingNorm,
+            dto.norm_per_100km,
+            effectiveFrom,
+            t,
+          );
+
+          // DIQQAT: parametr — car_id, CarFuelNorm.id EMAS
+          await this.carDailyExpenseService.recalculateCarChain(
+            existingNorm.car_id,
+            t,
+          );
 
           return existingNorm;
         }
 
-        const norm = await this.carFuelNormRepo.create(dto, { transaction: t });
-        // Agar birinchi marta yaratilayotgan bo'lsa, mashina yaratilgan sana olinadi, yo'q bo'lsa bugun
-        const carCreationDate = car.createdAt ? new Date(car.createdAt).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
-        await this.carFuelNormHistoryService.createInitialHistory(norm.id, dto.norm_per_100km, carCreationDate, t);
+        // Butunlay yangi (car_id, fuel_id) — birinchi marta yaratilmoqda
+        const norm = await this.carFuelNormRepo.create(
+          {
+            car_id: dto.car_id,
+            fuel_id: dto.fuel_id,
+            norm_per_100km: dto.norm_per_100km,
+            initial_balance: dto.current_balance ?? 0,
+            current_balance: dto.current_balance ?? 0,
+          },
+          { transaction: t },
+        );
+
+        await this.insertNormHistoryEntry(
+          norm,
+          dto.norm_per_100km,
+          effectiveFrom,
+          t,
+        );
+
         return norm;
       });
-      return carFuelNorm;
     } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
+      if (error instanceof HttpException) throw error;
       console.error('CarFuelNorm creation error:', error);
       throw new InternalServerErrorException(
         'Norma yaratishda xatolik yuz berdi',
@@ -294,6 +334,142 @@ export class CarFuelNormService {
       );
     }
   }
+  private subtractOneDay(dateStr: string): string {
+    const d = new Date(dateStr);
+    d.setDate(d.getDate() - 1);
+    return d.toISOString().split('T')[0];
+  }
+
+  private async insertNormHistoryEntry(
+    carFuelNorm: CarFuelNorm,
+    newNormPer100km: number,
+    effectiveFrom: string,
+    t: Transaction,
+  ): Promise<void> {
+    const existingHistoryCount = await CarFuelNormHistory.count({
+      where: { car_fuel_norm_id: carFuelNorm.id },
+      transaction: t,
+    });
+
+    if (existingHistoryCount === 0) {
+      // BIRINCHI YOZUV
+      await CarFuelNormHistory.create({
+        car_fuel_norm_id: carFuelNorm.id,
+        norm_per_100km: newNormPer100km,
+        effective_from: effectiveFrom,
+        effective_to: null,
+      }, { transaction: t });
+
+      await carFuelNorm.update(
+        { norm_per_100km: newNormPer100km },
+        { transaction: t },
+      );
+      return;
+    }
+
+    // YANGI QADAM: ENG BIRINCHI (eng erta effective_from ga ega)
+    // tarixiy yozuvni topish — bu HOLAT 3 ni aniqlash uchun kerak
+    const earliestRecord = await CarFuelNormHistory.findOne({
+      where: { car_fuel_norm_id: carFuelNorm.id },
+      order: [['effective_from', 'ASC']],
+      transaction: t,
+      lock: t.LOCK.UPDATE,
+    });
+
+    // HOLAT 3: X mavjud ENG BIRINCHI yozuvdan HAM OLDINGI sanaga tushadi
+    if (effectiveFrom < earliestRecord.effective_from) {
+      await CarFuelNormHistory.create({
+        car_fuel_norm_id: carFuelNorm.id,
+        norm_per_100km: newNormPer100km,
+        effective_from: effectiveFrom,
+        effective_to: this.subtractOneDay(earliestRecord.effective_from),
+      }, { transaction: t });
+
+      // DIQQAT: bu yerda carFuelNorm.norm_per_100km YANGILANMAYDI,
+      // chunki yangi yozuv "yopiq" (effective_to bor), joriy norma
+      // hamon earliestRecord (yoki undan keyingi ochiq yozuv) bo'lib
+      // qoladi
+      return;
+    }
+
+    // HOLAT 3.5: X ANIQ earliestRecord.effective_from ga TENG bo'lsa
+    // bu HAM "mavjud sanaga ustidan yozish" holati, ConflictException
+    if (effectiveFrom === earliestRecord.effective_from) {
+      throw new ConflictException(
+        "Bu sanada allaqachon norma o'zgarishi mavjud, yangi yaratish " +
+        "o'rniga MAVJUD yozuvni tahrirlang",
+      );
+    }
+
+    // HOLAT 2: X earliestRecord dan KEYIN — MAVJUD to'liq algoritm
+    // (containingRecord / nextRecord), O'ZGARISHSIZ DAVOM ETADI:
+
+    const containingRecord = await CarFuelNormHistory.findOne({
+      where: {
+        car_fuel_norm_id: carFuelNorm.id,
+        effective_from: { [Op.lte]: effectiveFrom },
+        [Op.or]: [
+          { effective_to: null },
+          { effective_to: { [Op.gte]: effectiveFrom } },
+        ],
+      },
+      transaction: t,
+      lock: t.LOCK.UPDATE,
+    });
+
+    // MUHIM: bu yerda containingRecord ENDI HAR DOIM topiladi, chunki
+    // yuqorida effectiveFrom >= earliestRecord.effective_from ekanligi
+    // ALLAQACHON tasdiqlangan — shuning uchun "topilmadi" holati BU
+    // YERDA endi YUZ BERMAYDI. Lekin xavfsizlik uchun tekshiruvni
+    // SAQLAB QOLING:
+    if (!containingRecord) {
+      throw new InternalServerErrorException(
+        "Norma tarixini aniqlashda kutilmagan xatolik yuz berdi",
+      );
+    }
+
+    if (effectiveFrom === containingRecord.effective_from) {
+      throw new ConflictException(
+        "Bu sanada allaqachon norma o'zgarishi mavjud, yangi yaratish " +
+        "o'rniga MAVJUD yozuvni tahrirlang",
+      );
+    }
+
+    const nextRecord = await CarFuelNormHistory.findOne({
+      where: {
+        car_fuel_norm_id: carFuelNorm.id,
+        effective_from: { [Op.gt]: effectiveFrom },
+      },
+      order: [['effective_from', 'ASC']],
+      transaction: t,
+      lock: t.LOCK.UPDATE,
+    });
+
+    let newEffectiveTo = null;
+    if (nextRecord) {
+      newEffectiveTo = this.subtractOneDay(nextRecord.effective_from);
+    }
+
+    await containingRecord.update(
+      { effective_to: this.subtractOneDay(effectiveFrom) },
+      { transaction: t },
+    );
+
+    await CarFuelNormHistory.create({
+      car_fuel_norm_id: carFuelNorm.id,
+      norm_per_100km: newNormPer100km,
+      effective_from: effectiveFrom,
+      effective_to: newEffectiveTo,
+    }, { transaction: t });
+
+    if (newEffectiveTo === null) {
+      await carFuelNorm.update(
+        { norm_per_100km: newNormPer100km },
+        { transaction: t },
+      );
+    }
+  }
+
   async changeNorm(id: string, dto: ChangeCarFuelNormDto): Promise<CarFuelNorm> {
     try {
       const today = new Date().toISOString().split('T')[0];
@@ -314,24 +490,23 @@ export class CarFuelNormService {
           throw new NotFoundException(`ID ${id} bo'yicha norma topilmadi`);
         }
 
-        await this.carFuelNormHistoryService.closeCurrentAndCreateNew(
-          id,
+        await this.insertNormHistoryEntry(
+          carFuelNorm,
           dto.new_norm_per_100km,
           dto.effective_from,
-          t
+          t,
         );
 
-        await carFuelNorm.update(
-          { norm_per_100km: dto.new_norm_per_100km },
-          { transaction: t },
+        // DIQQAT: parametr — car_id, CarFuelNorm.id EMAS
+        await this.carDailyExpenseService.recalculateCarChain(
+          carFuelNorm.car_id,
+          t,
         );
 
         return carFuelNorm;
       });
     } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
+      if (error instanceof HttpException) throw error;
       console.error('CarFuelNorm changeNorm error:', error);
       throw new InternalServerErrorException(
         "Normani o'zgartirishda xatolik yuz berdi",
