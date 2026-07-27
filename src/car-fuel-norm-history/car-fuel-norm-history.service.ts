@@ -36,42 +36,7 @@ export class CarFuelNormHistoryService {
     }
   }
 
-  async closeCurrentAndCreateNew(
-    carFuelNormId: string,
-    newNormPer100km: number,
-    effectiveFrom: string,
-    transaction?: Transaction
-  ) {
-    const openHistory = await this.historyRepo.findOne({
-      where: { car_fuel_norm_id: carFuelNormId, effective_to: null },
-      transaction,
-      lock: transaction ? transaction.LOCK.UPDATE : undefined,
-    });
 
-    if (openHistory) {
-      if (effectiveFrom < openHistory.effective_from) {
-        throw new BadRequestException(
-          "Yangi norma sanasi avvalgi normaning boshlanish sanasidan kichik bo'lishi mumkin emas",
-        );
-      }
-
-      const effectiveFromDate = new Date(effectiveFrom);
-      effectiveFromDate.setDate(effectiveFromDate.getDate() - 1);
-      const effectiveTo = effectiveFromDate.toISOString().split('T')[0];
-
-      await openHistory.update({ effective_to: effectiveTo }, { transaction });
-    }
-
-    await this.historyRepo.create(
-      {
-        car_fuel_norm_id: carFuelNormId,
-        norm_per_100km: newNormPer100km,
-        effective_from: effectiveFrom,
-        effective_to: null,
-      },
-      { transaction },
-    );
-  }
 
   async getNormForDate(carFuelNormId: string, date: string, transaction?: Transaction): Promise<number> {
     const historyRecord = await this.historyRepo.findOne({
