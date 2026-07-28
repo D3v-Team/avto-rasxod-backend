@@ -629,11 +629,23 @@ export class CarDailyExpenseService {
       }
 
       const [year, monthNum] = query.month.split('-');
-      const daysInMonth = new Date(
+
+      const totalDaysInMonth = new Date(
         parseInt(year),
         parseInt(monthNum),
         0,
       ).getDate();
+
+
+      const today = new Date();
+      const isCurrentMonth =
+        parseInt(year) === today.getFullYear() &&
+        parseInt(monthNum) === today.getMonth() + 1;
+
+      const daysInMonth = isCurrentMonth
+        ? today.getDate()
+        : totalDaysInMonth;
+
       const startDate = `${query.month}-01`;
       const endDate = `${query.month}-${daysInMonth.toString().padStart(2, '0')}`;
 
@@ -681,6 +693,7 @@ export class CarDailyExpenseService {
           id: record.id,
           fuel_id: record.fuel_id,
           fuel_name: record.fuel?.name,
+          fuel_price_at_time: record.fuel_price_at_time,
           fuel_unit: record.fuel?.unit,
           mileage: record.mileage,
           received_amount: record.received_amount,
@@ -719,6 +732,7 @@ export class CarDailyExpenseService {
         mileage: number | null;
       }> = [];
 
+
       for (let day = 1; day <= daysInMonth; day++) {
         const date = `${query.month}-${day.toString().padStart(2, '0')}`;
         const dayExpenses = expensesByDate[date] || [];
@@ -738,12 +752,12 @@ export class CarDailyExpenseService {
           runningOdometer = lastExpenseForDay.odometer_end;
         } else {
           days.push({
-      date,
-      expenses: [],
-      odometer_start: runningOdometer,
-      odometer_end: runningOdometer,
-      mileage: 0,
-    });
+            date,
+            expenses: [],
+            odometer_start: runningOdometer,
+            odometer_end: runningOdometer,
+            mileage: 0,
+          });
         }
       }
 
