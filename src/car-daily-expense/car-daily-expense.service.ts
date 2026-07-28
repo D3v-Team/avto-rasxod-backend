@@ -94,11 +94,11 @@ export class CarDailyExpenseService {
         const mileage = dto.mileage;
         const received_amount = dto.received_amount || 0;
 
-        if (mileage === 0 && received_amount === 0) {
-          throw new BadRequestException(
-            "Kamida bittasi kiritilishi shart: yoqilg'i quyilgan miqdori yoki bosib o'tilgan masofa. Ikkalasi ham 0 bo'lgan yozuv yaratib bo'lmaydi",
-          );
-        }
+        // if (mileage === 0 && received_amount === 0) {
+        //   throw new BadRequestException(
+        //     "Kamida bittasi kiritilishi shart: yoqilg'i quyilgan miqdori yoki bosib o'tilgan masofa. Ikkalasi ham 0 bo'lgan yozuv yaratib bo'lmaydi",
+        //   );
+        // }
 
         const expense = await this.expenseRepo.create(
           {
