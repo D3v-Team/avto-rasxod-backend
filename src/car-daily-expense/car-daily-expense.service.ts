@@ -707,7 +707,7 @@ export class CarDailyExpenseService {
       });
       const initialOdometer = previousRecord
         ? previousRecord.odometer_end
-        : car.initial_speedometer;
+        : car.initial_odometer;
 
       let runningOdometer = initialOdometer;
 
@@ -1261,13 +1261,13 @@ export class CarDailyExpenseService {
           });
         }
 
-        const start_speedometer = previousOdometerMap.has(car.id)
+        const start_odometer = previousOdometerMap.has(car.id)
           ? previousOdometerMap.get(car.id)
-          : (Number(car.initial_speedometer) || 0);
+          : (Number(car.initial_odometer) || 0);
 
-        const end_speedometer = carLastRecord
+        const end_odometer = carLastRecord
           ? Number(carLastRecord.odometer_end)
-          : start_speedometer;
+          : start_odometer;
 
         let carTotalMileage = 0;
         let carTotalSum = 0;
@@ -1332,8 +1332,8 @@ export class CarDailyExpenseService {
               : null,
             driver: car.driver ? { full_name: car.driver.full_name } : null,
           },
-          start_speedometer,
-          end_speedometer,
+          start_odometer,
+          end_odometer,
           total_mileage: carTotalMileage,
           fuels: fuelsResult,
           total_sum: carTotalSum,
@@ -1766,7 +1766,7 @@ export class CarDailyExpenseService {
     const car = await this.carRepo.findByPk(carId, { transaction: t, lock: t.LOCK.UPDATE });
     if (!car) throw new NotFoundException('Mashina topilmadi');
 
-    let runningOdometer = car.initial_speedometer;
+    let runningOdometer = car.initial_odometer;
     let sequenceCounter = 0;
 
     const carFuelNorms = await this.carFuelNormRepo.findAll({
@@ -1822,7 +1822,7 @@ export class CarDailyExpenseService {
 
     // 5. Yakuniy holat saqlanadi
     await car.update({
-      speedometer: runningOdometer,
+      odometer: runningOdometer,
       last_sequence_no: sequenceCounter,
     }, { transaction: t });
 

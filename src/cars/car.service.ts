@@ -38,8 +38,8 @@ export class CarService {
         plate_number: normalizeName(dto.plate_number),
       };
 
-      if (dto.speedometer !== undefined) {
-        normalizedDto.initial_speedometer = dto.speedometer;
+      if (dto.odometer !== undefined) {
+        normalizedDto.initial_odometer = dto.odometer;
       }
 
       if (normalizedDto.responsible_employee_id) {
@@ -161,7 +161,7 @@ export class CarService {
             },
             {
               model: CarFuelNorm,
-              as: 'car_fuel_norm',
+              as: 'car_fuel_norms',
               attributes: ['id', 'norm_per_100km', 'current_balance'],
               required: false,
               include: [
@@ -216,7 +216,7 @@ export class CarService {
           },
           {
             model: CarFuelNorm,
-            as: 'car_fuel_norm',
+            as: 'car_fuel_norms',
             attributes: ['current_balance'],
             required: false,
           },
@@ -250,10 +250,10 @@ export class CarService {
       if (dto.plate_number !== undefined) {
         normalizedDto.plate_number = normalizeName(dto.plate_number);
       }
-      if (dto.speedometer !== undefined) {
-        // Asosiy spidometr o'zgarganda initial_speedometer ni ham yangilaymiz,
-        // chunki UI faqat bitta spidometr maydonini yuboradi
-        normalizedDto.initial_speedometer = dto.speedometer;
+      if (dto.odometer !== undefined) {
+        // Asosiy odometer o'zgarganda initial_odometer ni ham yangilaymiz,
+        // chunki UI faqat bitta odometer maydonini yuboradi
+        normalizedDto.initial_odometer = dto.odometer;
       }
 
       // Unikal tekshiruv normalizatsiya qilingan plate_number bo'yicha bajariladi

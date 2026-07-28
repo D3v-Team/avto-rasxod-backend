@@ -261,14 +261,24 @@ export class CarFuelNormService {
 
   async update(id: string, dto: UpdateCarFuelNormDto): Promise<CarFuelNorm> {
     try {
-      await this.findOne(id);
+      const existing = await this.findOne(id);
 
-      const carFuelNorm = await this.carFuelNormRepo.update(dto, {
-        where: { id },
-        returning: true,
+      return await this.sequelize.transaction(async (t) => {
+        const carFuelNorm = await this.carFuelNormRepo.update(dto, {
+          where: { id },
+          returning: true,
+          transaction: t,
+        });
+
+        if (dto.initial_balance !== undefined || dto.current_balance !== undefined) {
+          await this.carDailyExpenseService.recalculateCarChain(
+            existing.car_id,
+            t,
+          );
+        }
+
+        return carFuelNorm[1][0];
       });
-
-      return carFuelNorm[1][0];
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;

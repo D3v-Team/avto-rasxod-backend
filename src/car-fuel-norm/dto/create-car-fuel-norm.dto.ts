@@ -41,7 +41,7 @@ export class CreateCarFuelNormDto {
   })
   @IsOptional()
   @IsNumber({}, { message: "Joriy balans raqam bo'lishi kerak" })
-  current_balance?: number = 0;
+  current_balance?: number;
 
   @IsOptional()
   @IsDateString({}, { message: "Amal qilish sanasi to'g'ri formatda bo'lishi kerak" })

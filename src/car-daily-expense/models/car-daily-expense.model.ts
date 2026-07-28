@@ -29,6 +29,12 @@ interface CarDailyExpenseAttr {
   norm_per_100km_at_time: number;
 }
 
+const decimalGetter = (field: string) =>
+  function (this: any) {
+    const raw = this.getDataValue(field);
+    return raw === null || raw === undefined ? raw : parseFloat(raw);
+  };
+
 @Table({
   tableName: 'car_daily_expenses',
   indexes: [
@@ -40,6 +46,7 @@ interface CarDailyExpenseAttr {
     {
       unique: false,
       fields: ['car_id', 'fuel_id', 'date'],
+      name: 'idx_car_daily_expense_car_fuel_date',
     },
   ],
 })
@@ -61,7 +68,10 @@ export class CarDailyExpense extends Model<
   })
   declare car_id: string;
 
-  @BelongsTo(() => Car)
+  @BelongsTo(() => Car, {
+    foreignKey: 'car_id',
+    as: 'car',
+  })
   declare car: Car;
 
   @ForeignKey(() => Fuel)
@@ -71,7 +81,10 @@ export class CarDailyExpense extends Model<
   })
   declare fuel_id: string;
 
-  @BelongsTo(() => Fuel)
+  @BelongsTo(() => Fuel, {
+    foreignKey: 'fuel_id',
+    as: 'fuel',
+  })
   declare fuel: Fuel;
 
   @Column({
@@ -86,6 +99,7 @@ export class CarDailyExpense extends Model<
   })
   declare sequence_no: number;
 
+  // Masofa o'lchovlari — pul emas, FLOAT to'g'ri
   @Column({
     type: DataType.FLOAT,
     allowNull: false,
@@ -104,28 +118,34 @@ export class CarDailyExpense extends Model<
   })
   declare mileage: number;
 
+  // ── Pul maydonlari: DECIMAL(15,2) + getter orqali number qaytariladi ──
+
   @Column({
-    type: DataType.FLOAT,
+    type: DataType.DECIMAL(15, 2),
     allowNull: true,
     defaultValue: 0,
+    get: decimalGetter('received_amount'),
   })
   declare received_amount?: number;
 
   @Column({
-    type: DataType.FLOAT,
+    type: DataType.DECIMAL(15, 2),
     allowNull: false,
+    get: decimalGetter('fuel_expence'),
   })
   declare fuel_expence: number;
 
   @Column({
-    type: DataType.FLOAT,
+    type: DataType.DECIMAL(15, 2),
     allowNull: false,
+    get: decimalGetter('fuel_price_at_time'),
   })
   declare fuel_price_at_time: number;
 
   @Column({
-    type: DataType.FLOAT,
+    type: DataType.DECIMAL(15, 2),
     allowNull: false,
+    get: decimalGetter('balance_after'),
   })
   declare balance_after: number;
 
@@ -142,11 +162,12 @@ export class CarDailyExpense extends Model<
   })
   declare note?: string;
 
+  // Iste'mol normasi (ko'rsatkich, pul emas) — FLOAT to'g'ri
   @Column({ type: DataType.FLOAT, allowNull: false })
   declare norm_per_100km_at_time: number;
 
+  // ── Snapshot (o'sha vaqtdagi) FKlar ────────────────────────────────
 
-  // O'sha vaqtdagi mas'ul xodim
   @ForeignKey(() => Employee)
   @Column({ type: DataType.UUID, allowNull: true })
   declare responsible_employee_id_at_time: string | null;
@@ -154,10 +175,10 @@ export class CarDailyExpense extends Model<
   @BelongsTo(() => Employee, {
     foreignKey: 'responsible_employee_id_at_time',
     as: 'responsible_employee_at_time',
+    onDelete: 'SET NULL',
   })
   declare responsible_employee_at_time: Employee | null;
 
-  // O'sha vaqtdagi haydovchi
   @ForeignKey(() => Employee)
   @Column({ type: DataType.UUID, allowNull: true })
   declare driver_id_at_time: string | null;
@@ -165,6 +186,7 @@ export class CarDailyExpense extends Model<
   @BelongsTo(() => Employee, {
     foreignKey: 'driver_id_at_time',
     as: 'driver_at_time',
+    onDelete: 'SET NULL',
   })
   declare driver_at_time: Employee | null;
 }
