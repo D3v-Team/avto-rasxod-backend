@@ -12,6 +12,9 @@ import { CreateCarSparePartsExpenseDto } from './dto/create-car-spare-parts-expe
 import { UpdateCarSparePartsExpenseDto } from './dto/update-car-spare-parts-expense.dto';
 import { QueryCarSparePartsExpenseDto } from './dto/query-car-spare-parts-expense.dto';
 import { CarSparePartsExpense } from './models/car-spare-parts-expense.model';
+import { ReportQueryDto } from './dto/report-query.dto';
+import { generateCarSparePartsReportExcel } from './excel/car-spare-parts-report.excel';
+import { ConfigService } from '@nestjs/config';
 const include:IncludeOptions[] = [
   {
     model: Car,
@@ -37,6 +40,7 @@ export class CarSparePartsExpenseService {
     @InjectModel(CarSparePartsExpense)
     private readonly expenseRepo: typeof CarSparePartsExpense,
     @InjectModel(Car) private readonly carRepo: typeof Car,
+    private readonly configService: ConfigService,
   ) { }
 
   async findAll(query: QueryCarSparePartsExpenseDto) {
@@ -124,6 +128,47 @@ export class CarSparePartsExpenseService {
       console.error('CarSparePartsExpense findAll error:', error);
       throw new InternalServerErrorException(
         'Ehtiyot qismlar xarajatlarini olishda xatolik yuz berdi',
+      );
+    }
+  }
+
+  async exportExcelReport(query: ReportQueryDto): Promise<Buffer> {
+    try {
+      const { date_from, date_to } = query;
+
+      const cars = await this.carRepo.findAll({
+        where: { is_deleted: false },
+        order: [['name', 'ASC']],
+        include: [
+          {
+            model: CarSparePartsExpense,
+            as: 'car_spare_parts_expenses',
+            where: {
+              date: {
+                [Op.between]: [date_from, date_to],
+              },
+            },
+            required: false,
+          },
+        ],
+      });
+
+      // Ehtiyot qismlarni sana bo'yicha tartiblash (ASC) chunki include ichida order berish ba'zan to'g'ri ishlamasligi mumkin
+      cars.forEach((car) => {
+        if (car.car_spare_parts_expenses && car.car_spare_parts_expenses.length > 0) {
+          car.car_spare_parts_expenses.sort((a, b) => {
+            return new Date(a.date).getTime() - new Date(b.date).getTime();
+          });
+        }
+      });
+
+      const orgName = this.configService.get<string>('ORGANIZATION_NAME', 'ЎҚУФ Сирдарё вилояти Кенгашининг');
+
+      return await generateCarSparePartsReportExcel(cars, date_from, date_to, orgName);
+    } catch (error) {
+      console.error('CarSparePartsExpense exportExcelReport error:', error);
+      throw new InternalServerErrorException(
+        'Excel hisobotini yaratishda xatolik yuz berdi',
       );
     }
   }

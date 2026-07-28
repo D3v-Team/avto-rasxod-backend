@@ -14,6 +14,9 @@ import { CarSparePartsExpenseService } from './car-spare-parts-expense.service';
 import { CreateCarSparePartsExpenseDto } from './dto/create-car-spare-parts-expense.dto';
 import { UpdateCarSparePartsExpenseDto } from './dto/update-car-spare-parts-expense.dto';
 import { QueryCarSparePartsExpenseDto } from './dto/query-car-spare-parts-expense.dto';
+import { ReportQueryDto } from './dto/report-query.dto';
+import { Response } from 'express';
+import { Res } from '@nestjs/common';
 import { UserRole } from '../common/enums/user-role.enum';
 import { Roles } from '../common/decorators/roles-auth-decorator';
 
@@ -31,6 +34,25 @@ export class CarSparePartsExpenseController {
   @Get()
   findAll(@Query() query: QueryCarSparePartsExpenseDto) {
     return this.carSparePartsExpenseService.findAll(query);
+  }
+
+  @ApiOperation({ summary: 'Avto ehtiyot qismlar sarfi Excel hisobotini yuklab olish' })
+  @ApiResponse({ status: 200, description: 'Excel fayl muvaffaqiyatli yuklandi' })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  @Get('report/excel')
+  async downloadExcelReport(
+    @Query() query: ReportQueryDto,
+    @Res() res: Response,
+  ) {
+    const buffer = await this.carSparePartsExpenseService.exportExcelReport(query);
+    const fileName = `avto-extiyot-qismlar-hisoboti_${query.date_from}_${query.date_to}.xlsx`;
+    
+    res.set({
+      'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename="${fileName}"`,
+    });
+    
+    res.send(buffer);
   }
 
   @ApiOperation({ summary: 'ID bo\'yicha xarajatni olish' })
