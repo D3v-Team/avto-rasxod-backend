@@ -94,11 +94,11 @@ export class CarDailyExpenseService {
         const mileage = dto.mileage;
         const received_amount = dto.received_amount || 0;
 
-        if (mileage === 0 && received_amount === 0) {
-          throw new BadRequestException(
-            "Kamida bittasi kiritilishi shart: yoqilg'i quyilgan miqdori yoki bosib o'tilgan masofa. Ikkalasi ham 0 bo'lgan yozuv yaratib bo'lmaydi",
-          );
-        }
+        // if (mileage === 0 && received_amount === 0) {
+        //   throw new BadRequestException(
+        //     "Kamida bittasi kiritilishi shart: yoqilg'i quyilgan miqdori yoki bosib o'tilgan masofa. Ikkalasi ham 0 bo'lgan yozuv yaratib bo'lmaydi",
+        //   );
+        // }
 
         const expense = await this.expenseRepo.create(
           {
@@ -1783,6 +1783,14 @@ export class CarDailyExpenseService {
       normIdMap.set(cfn.fuel_id, cfn.id);
     }
 
+    for (let i = 0; i < records.length; i++) {
+      await records[i].update(
+        { sequence_no: -(i + 1) },
+        { transaction: t },
+      );
+    }
+
+    // ── 1-BOSQICH: haqiqiy qiymatlarni hisoblab, yozib chiqamiz ──
     for (const record of records) {
       sequenceCounter++;
       // 1. Odometer qayta hisoblanadi
