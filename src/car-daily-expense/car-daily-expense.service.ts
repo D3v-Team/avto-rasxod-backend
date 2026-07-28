@@ -1783,6 +1783,14 @@ export class CarDailyExpenseService {
       normIdMap.set(cfn.fuel_id, cfn.id);
     }
 
+    for (let i = 0; i < records.length; i++) {
+      await records[i].update(
+        { sequence_no: -(i + 1) },
+        { transaction: t },
+      );
+    }
+
+    // ── 1-BOSQICH: haqiqiy qiymatlarni hisoblab, yozib chiqamiz ──
     for (const record of records) {
       sequenceCounter++;
       // 1. Odometer qayta hisoblanadi
