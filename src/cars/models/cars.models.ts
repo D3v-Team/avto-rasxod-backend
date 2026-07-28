@@ -9,14 +9,16 @@ import {
 } from 'sequelize-typescript';
 import { Employee } from '../../employees/models/employee.model';
 import { CarFuelNorm } from '../../car-fuel-norm/models/car-fuel-norm.model';
+import { CarDailyExpense } from '../../car-daily-expense/models/car-daily-expense.model';
+import { CarSparePartsExpense } from '../../car-spare-parts-expense/models/car-spare-parts-expense.model';
 
 interface CarAttr {
   name: string;
   plate_number: string;
-  responsible_employee_id?: string;
-  driver_id?: string;
-  initial_speedometer: number;
-  speedometer: number;
+  responsible_employee_id?: string | null;
+  driver_id?: string | null;
+  initial_odometer: number;
+  odometer: number;
   last_sequence_no: number;
   is_active?: boolean;
   is_deleted?: boolean;
@@ -69,43 +71,28 @@ export class Car extends Model<Car, CarAttr> {
     type: DataType.UUID,
     allowNull: true,
   })
-  declare responsible_employee_id?: string;
+  declare responsible_employee_id?: string | null;
 
   @ForeignKey(() => Employee)
   @Column({
     type: DataType.UUID,
     allowNull: true,
   })
-  declare driver_id?: string;
-
-  @BelongsTo(() => Employee, {
-    foreignKey: 'responsible_employee_id',
-    as: 'responsible_employee',
-  })
-  declare responsible_employee?: Employee;
-
-  @BelongsTo(() => Employee, {
-    foreignKey: 'driver_id',
-    as: 'driver',
-  })
-  declare driver?: Employee;
-
-  @HasMany(() => CarFuelNorm, { as: 'car_fuel_norm' })
-  declare car_fuel_norm: CarFuelNorm[];
+  declare driver_id?: string | null;
 
   @Column({
     type: DataType.FLOAT,
     allowNull: false,
     defaultValue: 0,
   })
-  declare initial_speedometer: number;
+  declare initial_odometer: number;
 
   @Column({
     type: DataType.FLOAT,
     allowNull: false,
     defaultValue: 0,
   })
-  declare speedometer: number;
+  declare odometer: number;
 
   @Column({
     type: DataType.INTEGER,
@@ -127,4 +114,35 @@ export class Car extends Model<Car, CarAttr> {
     defaultValue: false,
   })
   declare is_deleted: boolean;
+
+  // ── Assotsiatsiyalar ──
+  @BelongsTo(() => Employee, {
+    foreignKey: 'responsible_employee_id',
+    as: 'responsible_employee',
+  })
+  declare responsible_employee?: Employee | null;
+
+  @BelongsTo(() => Employee, {
+    foreignKey: 'driver_id',
+    as: 'driver',
+  })
+  declare driver?: Employee | null;
+
+  @HasMany(() => CarFuelNorm, {
+    foreignKey: 'car_id',
+    as: 'car_fuel_norms',
+  })
+  declare car_fuel_norms: CarFuelNorm[];
+
+  @HasMany(() => CarDailyExpense, {
+    foreignKey: 'car_id',
+    as: 'car_daily_expenses',
+  })
+  declare car_daily_expenses: CarDailyExpense[];
+
+  @HasMany(() => CarSparePartsExpense, {
+    foreignKey: 'car_id',
+    as: 'car_spare_parts_expenses',
+  })
+  declare car_spare_parts_expenses: CarSparePartsExpense[];
 }

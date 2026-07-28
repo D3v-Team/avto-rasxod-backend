@@ -43,7 +43,10 @@ export class CarFuelNormHistory extends Model<
   })
   declare car_fuel_norm_id: string;
 
-  @BelongsTo(() => CarFuelNorm)
+  @BelongsTo(() => CarFuelNorm, {
+    foreignKey: 'car_fuel_norm_id',
+    as: 'car_fuel_norm',
+  })
   declare car_fuel_norm: CarFuelNorm;
 
   @Column({

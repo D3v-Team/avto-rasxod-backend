@@ -60,16 +60,16 @@ export class CreateCarDto {
   driver_id?: string;
 
   @ApiProperty({
-    description: "Spidometr ko'rsatkichi",
+    description: "Odometer ko'rsatkichi",
     example: 0,
     minimum: 0,
     default: 0,
     required: false,
   })
   @IsOptional()
-  @IsNumber({}, { message: "Spidometr ko'rsatkichi raqam bo'lishi kerak" })
-  @Min(0, { message: "Spidometr ko'rsatkichi kamida 0 bo'lishi kerak" })
-  speedometer?: number = 0;
+  @IsNumber({}, { message: "Odometer ko'rsatkichi raqam bo'lishi kerak" })
+  @Min(0, { message: "Odometer ko'rsatkichi kamida 0 bo'lishi kerak" })
+  odometer?: number = 0;
 
   @ApiProperty({
     description: 'Mashina faol yoki faol emasligi',

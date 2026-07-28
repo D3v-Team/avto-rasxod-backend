@@ -3,11 +3,13 @@ import {
   Column,
   DataType,
   ForeignKey,
+  HasMany,
   Model,
   Table,
 } from 'sequelize-typescript';
 import { Car } from '../../cars/models/cars.models';
 import { Fuel } from '../../fuels/models/fuels.models';
+import { CarFuelNormHistory } from '../../car-fuel-norm-history/models/car-fuel-norm-history.model';
 
 interface CarFuelNormAttr {
   car_id: string;
@@ -17,6 +19,12 @@ interface CarFuelNormAttr {
   current_balance: number;
   is_deleted?: boolean;
 }
+
+const decimalGetter = (field: string) =>
+  function (this: any) {
+    const raw = this.getDataValue(field);
+    return raw === null || raw === undefined ? raw : parseFloat(raw);
+  };
 
 @Table({
   tableName: 'car_fuel_norms',
@@ -55,7 +63,10 @@ export class CarFuelNorm extends Model<CarFuelNorm, CarFuelNormAttr> {
   })
   declare car_id: string;
 
-  @BelongsTo(() => Car)
+  @BelongsTo(() => Car, {
+    foreignKey: 'car_id',
+    as: 'car',
+  })
   declare car: Car;
 
   @ForeignKey(() => Fuel)
@@ -65,7 +76,10 @@ export class CarFuelNorm extends Model<CarFuelNorm, CarFuelNormAttr> {
   })
   declare fuel_id: string;
 
-  @BelongsTo(() => Fuel)
+  @BelongsTo(() => Fuel, {
+    foreignKey: 'fuel_id',
+    as: 'fuel',
+  })
   declare fuel: Fuel;
 
   @Column({
@@ -75,16 +89,18 @@ export class CarFuelNorm extends Model<CarFuelNorm, CarFuelNormAttr> {
   declare norm_per_100km: number;
 
   @Column({
-    type: DataType.FLOAT,
+    type: DataType.DECIMAL(15, 2),
     allowNull: false,
     defaultValue: 0,
+    get: decimalGetter('initial_balance'),
   })
   declare initial_balance: number;
 
   @Column({
-    type: DataType.FLOAT,
+    type: DataType.DECIMAL(15, 2),
     allowNull: false,
     defaultValue: 0,
+    get: decimalGetter('current_balance'),
   })
   declare current_balance: number;
 
@@ -94,4 +110,10 @@ export class CarFuelNorm extends Model<CarFuelNorm, CarFuelNormAttr> {
     defaultValue: false,
   })
   declare is_deleted: boolean;
+
+  @HasMany(() => CarFuelNormHistory, {
+    foreignKey: 'car_fuel_norm_id',
+    as: 'history',
+  })
+  declare history: CarFuelNormHistory[];
 }
