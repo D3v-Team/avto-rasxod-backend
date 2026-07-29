@@ -14,14 +14,13 @@ import { Sequelize } from 'sequelize-typescript';
 import { CarFuelNorm } from './models/car-fuel-norm.model';
 import { CarFuelNormHistoryService } from '../car-fuel-norm-history/car-fuel-norm-history.service';
 import { CarFuelNormHistory } from '../car-fuel-norm-history/models/car-fuel-norm-history.model';
-import { Car } from '../cars/models/cars.models';
 import { Fuel } from '../fuels/models/fuels.models';
+import { Car } from '../cars/models/cars.models';
 import { CarDailyExpense } from '../car-daily-expense/models/car-daily-expense.model';
 import { CarDailyExpenseService } from '../car-daily-expense/car-daily-expense.service';
 import { CreateCarFuelNormDto } from './dto/create-car-fuel-norm.dto';
 import { UpdateCarFuelNormDto } from './dto/update-car-fuel-norm.dto';
 import { QueryCarFuelNormDto } from './dto/query-car-fuel-norm.dto';
-import { ChangeCarFuelNormDto } from './dto/change-car-fuel-norm.dto';
 import { normalizeName } from '../common/utils/normalize-name.util';
 
 // DIQQAT: CarFuelNorm modulida inson kiritadigan matnli maydonlar (nom, username v.b.) yo'q,
@@ -88,9 +87,9 @@ export class CarFuelNormService {
 
           await this.insertNormHistoryEntry(
             existingNorm,
-            dto.norm_per_100km,
             effectiveFrom,
             t,
+            dto.norm_per_100km,
           );
 
           // DIQQAT: parametr — car_id, CarFuelNorm.id EMAS
@@ -116,9 +115,9 @@ export class CarFuelNormService {
 
         await this.insertNormHistoryEntry(
           norm,
-          dto.norm_per_100km,
           effectiveFrom,
           t,
+          dto.norm_per_100km,
         );
 
         return norm;
@@ -352,9 +351,10 @@ export class CarFuelNormService {
 
   private async insertNormHistoryEntry(
     carFuelNorm: CarFuelNorm,
-    newNormPer100km: number,
     effectiveFrom: string,
     t: Transaction,
+    newNormPer100km?: number,
+    newPrice?: number,
   ): Promise<void> {
     const existingHistoryCount = await CarFuelNormHistory.count({
       where: { car_fuel_norm_id: carFuelNorm.id },
@@ -362,23 +362,28 @@ export class CarFuelNormService {
     });
 
     if (existingHistoryCount === 0) {
-      // BIRINCHI YOZUV
+      // BIRINCHI YOZUV (Umuman tarix yo'q holat)
+      const fuel = await Fuel.findByPk(carFuelNorm.fuel_id, { transaction: t });
+      const currentFuelPrice = fuel ? fuel.price : 0;
+      
+      const resolvedNorm = newNormPer100km ?? 0;
+      const resolvedPrice = newPrice ?? currentFuelPrice;
+
       await CarFuelNormHistory.create({
         car_fuel_norm_id: carFuelNorm.id,
-        norm_per_100km: newNormPer100km,
+        norm_per_100km: resolvedNorm,
+        fuel_price_at_time: resolvedPrice,
         effective_from: effectiveFrom,
         effective_to: null,
       }, { transaction: t });
 
       await carFuelNorm.update(
-        { norm_per_100km: newNormPer100km },
+        { norm_per_100km: resolvedNorm },
         { transaction: t },
       );
       return;
     }
 
-    // YANGI QADAM: ENG BIRINCHI (eng erta effective_from ga ega)
-    // tarixiy yozuvni topish — bu HOLAT 3 ni aniqlash uchun kerak
     const earliestRecord = await CarFuelNormHistory.findOne({
       where: { car_fuel_norm_id: carFuelNorm.id },
       order: [['effective_from', 'ASC']],
@@ -386,34 +391,46 @@ export class CarFuelNormService {
       lock: t.LOCK.UPDATE,
     });
 
-    // HOLAT 3: X mavjud ENG BIRINCHI yozuvdan HAM OLDINGI sanaga tushadi
+    // HOLAT 3: Eng birinchi yozuvdan ham oldinroq
     if (effectiveFrom < earliestRecord.effective_from) {
+      const resolvedNorm = newNormPer100km ?? earliestRecord.norm_per_100km;
+      const resolvedPrice = newPrice ?? earliestRecord.fuel_price_at_time;
+
       await CarFuelNormHistory.create({
         car_fuel_norm_id: carFuelNorm.id,
-        norm_per_100km: newNormPer100km,
+        norm_per_100km: resolvedNorm,
+        fuel_price_at_time: resolvedPrice,
         effective_from: effectiveFrom,
         effective_to: this.subtractOneDay(earliestRecord.effective_from),
       }, { transaction: t });
 
-      // DIQQAT: bu yerda carFuelNorm.norm_per_100km YANGILANMAYDI,
-      // chunki yangi yozuv "yopiq" (effective_to bor), joriy norma
-      // hamon earliestRecord (yoki undan keyingi ochiq yozuv) bo'lib
-      // qoladi
       return;
     }
 
-    // HOLAT 3.5: X ANIQ earliestRecord.effective_from ga TENG bo'lsa
-    // bu HAM "mavjud sanaga ustidan yozish" holati, ConflictException
+    // HOLAT 3.5: Eng birinchi yozuv sanasi bilan AYNAN BIR XIL (UPDATE holati)
     if (effectiveFrom === earliestRecord.effective_from) {
-      throw new ConflictException(
-        "Bu sanada allaqachon norma o'zgarishi mavjud, yangi yaratish " +
-        "o'rniga MAVJUD yozuvni tahrirlang",
+      const resolvedNorm = newNormPer100km ?? earliestRecord.norm_per_100km;
+      const resolvedPrice = newPrice ?? earliestRecord.fuel_price_at_time;
+
+      await earliestRecord.update(
+        {
+          norm_per_100km: resolvedNorm,
+          fuel_price_at_time: resolvedPrice,
+        },
+        { transaction: t },
       );
+
+      // Agar bu yozuv JORIY (effective_to === null) davri bo'lsa, normani yangilaymiz
+      if (earliestRecord.effective_to === null) {
+        await carFuelNorm.update(
+          { norm_per_100km: resolvedNorm },
+          { transaction: t }
+        );
+      }
+      return;
     }
 
-    // HOLAT 2: X earliestRecord dan KEYIN — MAVJUD to'liq algoritm
-    // (containingRecord / nextRecord), O'ZGARISHSIZ DAVOM ETADI:
-
+    // HOLAT 2: earliestRecord'dan KEYIN
     const containingRecord = await CarFuelNormHistory.findOne({
       where: {
         car_fuel_norm_id: carFuelNorm.id,
@@ -427,23 +444,38 @@ export class CarFuelNormService {
       lock: t.LOCK.UPDATE,
     });
 
-    // MUHIM: bu yerda containingRecord ENDI HAR DOIM topiladi, chunki
-    // yuqorida effectiveFrom >= earliestRecord.effective_from ekanligi
-    // ALLAQACHON tasdiqlangan — shuning uchun "topilmadi" holati BU
-    // YERDA endi YUZ BERMAYDI. Lekin xavfsizlik uchun tekshiruvni
-    // SAQLAB QOLING:
     if (!containingRecord) {
       throw new InternalServerErrorException(
         "Norma tarixini aniqlashda kutilmagan xatolik yuz berdi",
       );
     }
 
+    // HOLAT: containingRecord sanasi bilan AYNAN BIR XIL (UPDATE holati)
     if (effectiveFrom === containingRecord.effective_from) {
-      throw new ConflictException(
-        "Bu sanada allaqachon norma o'zgarishi mavjud, yangi yaratish " +
-        "o'rniga MAVJUD yozuvni tahrirlang",
+      const resolvedNorm = newNormPer100km ?? containingRecord.norm_per_100km;
+      const resolvedPrice = newPrice ?? containingRecord.fuel_price_at_time;
+
+      await containingRecord.update(
+        {
+          norm_per_100km: resolvedNorm,
+          fuel_price_at_time: resolvedPrice,
+        },
+        { transaction: t },
       );
+
+      // Agar bu yozuv JORIY (effective_to === null) davri bo'lsa, normani yangilaymiz
+      if (containingRecord.effective_to === null) {
+        await carFuelNorm.update(
+          { norm_per_100km: resolvedNorm },
+          { transaction: t }
+        );
+      }
+      return;
     }
+
+    // X containingRecord ichiga tushadi (YANGI BO'LINISH holati)
+    const resolvedNorm = newNormPer100km ?? containingRecord.norm_per_100km;
+    const resolvedPrice = newPrice ?? containingRecord.fuel_price_at_time;
 
     const nextRecord = await CarFuelNormHistory.findOne({
       where: {
@@ -467,61 +499,68 @@ export class CarFuelNormService {
 
     await CarFuelNormHistory.create({
       car_fuel_norm_id: carFuelNorm.id,
-      norm_per_100km: newNormPer100km,
+      norm_per_100km: resolvedNorm,
+      fuel_price_at_time: resolvedPrice,
       effective_from: effectiveFrom,
       effective_to: newEffectiveTo,
     }, { transaction: t });
 
     if (newEffectiveTo === null) {
       await carFuelNorm.update(
-        { norm_per_100km: newNormPer100km },
+        { norm_per_100km: resolvedNorm },
         { transaction: t },
       );
     }
   }
 
-  async changeNorm(id: string, dto: ChangeCarFuelNormDto): Promise<CarFuelNorm> {
-    try {
-      const today = new Date().toISOString().split('T')[0];
-      if (dto.effective_from > today) {
-        throw new BadRequestException(
-          "Norma amal qilish sanasi kelajakka tegishli bo'lishi mumkin emas, " +
-          "faqat bugungi kun yoki undan oldingi sana kiritilishi mumkin",
-        );
-      }
-
-      return await this.sequelize.transaction(async (t) => {
-        const carFuelNorm = await this.carFuelNormRepo.findByPk(id, {
-          transaction: t,
-          lock: t.LOCK.UPDATE,
-        });
-
-        if (!carFuelNorm) {
-          throw new NotFoundException(`ID ${id} bo'yicha norma topilmadi`);
-        }
-
-        await this.insertNormHistoryEntry(
-          carFuelNorm,
-          dto.new_norm_per_100km,
-          dto.effective_from,
-          t,
-        );
-
-        // DIQQAT: parametr — car_id, CarFuelNorm.id EMAS
-        await this.carDailyExpenseService.recalculateCarChain(
-          carFuelNorm.car_id,
-          t,
-        );
-
-        return carFuelNorm;
-      });
-    } catch (error) {
-      if (error instanceof HttpException) throw error;
-      console.error('CarFuelNorm changeNorm error:', error);
-      throw new InternalServerErrorException(
-        "Normani o'zgartirishda xatolik yuz berdi",
+  async updateNormHistoryEntry(
+    carFuelNormId: string,
+    effectiveFrom: string,
+    t: Transaction,
+    newNormPer100km?: number,
+    newPrice?: number,
+  ): Promise<void> {
+    if (newNormPer100km === undefined && newPrice === undefined) {
+      throw new BadRequestException(
+        "Kamida bittasi kiritilishi shart: norma yoki narx",
       );
     }
+
+    const today = new Date().toISOString().split('T')[0];
+    if (effectiveFrom > today) {
+      throw new BadRequestException(
+        "Amal qilish sanasi kelajakka tegishli bo'lishi mumkin emas",
+      );
+    }
+
+    const carFuelNorm = await this.carFuelNormRepo.findByPk(carFuelNormId, {
+      transaction: t,
+      lock: t.LOCK.UPDATE,
+    });
+    
+    if (!carFuelNorm) throw new NotFoundException('Norma topilmadi');
+
+    await this.insertNormHistoryEntry(
+      carFuelNorm,
+      effectiveFrom,
+      t,
+      newNormPer100km,
+      newPrice,
+    );
+
+    // Fuel.price faqat narx BERILGAN bo'lsa yangilanadi (kelajak sanalar yuqorida bloklangan)
+    if (newPrice !== undefined) {
+      await Fuel.update(
+        { price: newPrice },
+        { where: { id: carFuelNorm.fuel_id }, transaction: t },
+      );
+    }
+
+    // Har qanday o'zgarish bo'lganda zanjirni qayta hisoblaymiz
+    await this.carDailyExpenseService.recalculateCarChain(
+      carFuelNorm.car_id,
+      t,
+    );
   }
 }
 

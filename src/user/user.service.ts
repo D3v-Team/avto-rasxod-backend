@@ -63,11 +63,9 @@ export class UserService implements OnModuleInit {
   }
 
   async createUser(dto: CreateUserDto) {
-    // Normalizatsiya kiritilgan matn maydonlariga qo'llanadi
-    const normalizedUsername = normalizeName(dto.username);
+    const normalizedUsername = dto.username.trim();
     const normalizedFullName = normalizeName(dto.full_name);
 
-    // Unikal tekshiruv normalizatsiya qilingan username bo'yicha bajariladi
     const existing = await this.userRepo.findOne({
       where: { username: normalizedUsername },
     });

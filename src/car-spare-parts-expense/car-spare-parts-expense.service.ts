@@ -14,6 +14,7 @@ import { QueryCarSparePartsExpenseDto } from './dto/query-car-spare-parts-expens
 import { CarSparePartsExpense } from './models/car-spare-parts-expense.model';
 import { ReportQueryDto } from './dto/report-query.dto';
 import { generateCarSparePartsReportExcel } from './excel/car-spare-parts-report.excel';
+import { generateCarSparePartsLedgerExcel } from './excel/car-spare-parts-ledger.excel';
 import { ConfigService } from '@nestjs/config';
 const include:IncludeOptions[] = [
   {
@@ -171,6 +172,32 @@ export class CarSparePartsExpenseService {
         'Excel hisobotini yaratishda xatolik yuz berdi',
       );
     }
+  }
+
+  async getExcelLedgerReport(
+    dateFrom: string,
+    dateTo: string,
+    orgName: string = 'Ташкилот',
+  ): Promise<Buffer> {
+    const cars = await this.carRepo.findAll({
+      where: { is_deleted: false },
+      order: [['name', 'ASC']],
+    });
+
+    const expenses = await this.expenseRepo.findAll({
+      where: {
+        date: {
+          [Op.gte]: dateFrom,
+          [Op.lte]: dateTo,
+        },
+      },
+      order: [
+        ['date', 'ASC'],
+        ['id', 'ASC'],
+      ],
+    });
+
+    return generateCarSparePartsLedgerExcel(expenses, cars, dateFrom, dateTo, orgName);
   }
 
   async findOne(id: string): Promise<CarSparePartsExpense> {

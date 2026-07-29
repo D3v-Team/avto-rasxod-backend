@@ -8,9 +8,16 @@ import {
 } from 'sequelize-typescript';
 import { CarFuelNorm } from '../../car-fuel-norm/models/car-fuel-norm.model';
 
+const decimalGetter = (field: string) =>
+  function (this: any) {
+    const value = this.getDataValue(field);
+    return value === null || value === undefined ? null : parseFloat(value);
+  };
+
 interface CarFuelNormHistoryAttr {
   car_fuel_norm_id: string;
   norm_per_100km: number;
+  fuel_price_at_time: number;
   effective_from: string;
   effective_to: string | null;
 }
@@ -54,6 +61,13 @@ export class CarFuelNormHistory extends Model<
     allowNull: false,
   })
   declare norm_per_100km: number;
+
+  @Column({
+    type: DataType.DECIMAL(15, 2),
+    allowNull: false,
+    get: decimalGetter('fuel_price_at_time'),
+  })
+  declare fuel_price_at_time: number;
 
   @Column({
     type: DataType.DATEONLY,
