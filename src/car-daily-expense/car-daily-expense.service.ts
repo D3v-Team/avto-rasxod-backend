@@ -441,11 +441,11 @@ export class CarDailyExpenseService {
         const newMileage = dto.mileage ?? record.mileage;
         const newReceivedAmount = dto.received_amount ?? record.received_amount;
 
-        if (newMileage === 0 && newReceivedAmount === 0) {
-          throw new BadRequestException(
-            "Kamida bittasi bo'lishi shart: yoqilg'i quyilgan miqdori yoki bosib o'tilgan masofa. Ikkalasi ham 0 bo'lishi mumkin emas",
-          );
-        }
+        // if (newMileage === 0 && newReceivedAmount === 0) {
+        //   throw new BadRequestException(
+        //     "Kamida bittasi bo'lishi shart: yoqilg'i quyilgan miqdori yoki bosib o'tilgan masofa. Ikkalasi ham 0 bo'lishi mumkin emas",
+        //   );
+        // }
 
         await record.update(
           {
