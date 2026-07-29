@@ -365,7 +365,7 @@ export class CarFuelNormService {
       // BIRINCHI YOZUV (Umuman tarix yo'q holat)
       const fuel = await Fuel.findByPk(carFuelNorm.fuel_id, { transaction: t });
       const currentFuelPrice = fuel ? fuel.price : 0;
-      
+
       const resolvedNorm = newNormPer100km ?? 0;
       const resolvedPrice = newPrice ?? currentFuelPrice;
 
@@ -537,7 +537,7 @@ export class CarFuelNormService {
       transaction: t,
       lock: t.LOCK.UPDATE,
     });
-    
+
     if (!carFuelNorm) throw new NotFoundException('Norma topilmadi');
 
     await this.insertNormHistoryEntry(
@@ -548,12 +548,29 @@ export class CarFuelNormService {
       newPrice,
     );
 
-    // Fuel.price faqat narx BERILGAN bo'lsa yangilanadi (kelajak sanalar yuqorida bloklangan)
+    // Fuel.price faqat effectiveFrom JORIY (ochiq, effective_to=null) davrga
+    // tegishli bo'lsa yangilanadi — o'tmishdagi yopiq davr tuzatilganda EMAS
     if (newPrice !== undefined) {
-      await Fuel.update(
-        { price: newPrice },
-        { where: { id: carFuelNorm.fuel_id }, transaction: t },
-      );
+      const currentOpenRecord = await CarFuelNormHistory.findOne({
+        where: {
+          car_fuel_norm_id: carFuelNorm.id,
+          effective_to: null,
+        },
+        transaction: t,
+      });
+
+      if (!currentOpenRecord) {
+        throw new InternalServerErrorException(
+          "Tizimda joriy ochiq norma tarixi topilmadi. Ma'lumotlar bazasida xatolik bo'lishi mumkin.",
+        );
+      }
+
+      if (effectiveFrom >= currentOpenRecord.effective_from) {
+        await Fuel.update(
+          { price: newPrice },
+          { where: { id: carFuelNorm.fuel_id }, transaction: t },
+        );
+      }
     }
 
     // Har qanday o'zgarish bo'lganda zanjirni qayta hisoblaymiz
