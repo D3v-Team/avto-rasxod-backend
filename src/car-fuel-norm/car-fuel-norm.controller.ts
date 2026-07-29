@@ -9,7 +9,11 @@ import {
   Query,
   UseGuards,
   ParseUUIDPipe,
+  HttpException,
+  InternalServerErrorException,
 } from '@nestjs/common';
+import { InjectConnection } from '@nestjs/sequelize';
+import { Sequelize } from 'sequelize-typescript';
 import {
   ApiTags,
   ApiOperation,
@@ -21,7 +25,7 @@ import { CarFuelNormService } from './car-fuel-norm.service';
 import { CreateCarFuelNormDto } from './dto/create-car-fuel-norm.dto';
 import { UpdateCarFuelNormDto } from './dto/update-car-fuel-norm.dto';
 import { QueryCarFuelNormDto } from './dto/query-car-fuel-norm.dto';
-import { ChangeCarFuelNormDto } from './dto/change-car-fuel-norm.dto';
+import { UpdateCarFuelNormHistoryDto } from './dto/update-car-fuel-norm-history.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { UserRole } from '../common/enums/user-role.enum';
@@ -32,7 +36,10 @@ import { Roles } from '../common/decorators/roles-auth-decorator';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('car-fuel-norms')
 export class CarFuelNormController {
-  constructor(private readonly carFuelNormService: CarFuelNormService) {}
+  constructor(
+    private readonly carFuelNormService: CarFuelNormService,
+    @InjectConnection() private readonly sequelize: Sequelize,
+  ) {}
 
   @ApiOperation({ summary: 'Yangi norma yaratish' })
   @ApiResponse({ status: 201, description: 'Norma muvaffaqiyatli yaratildi' })
@@ -90,17 +97,35 @@ export class CarFuelNormController {
     return this.carFuelNormService.update(id, updateCarFuelNormDto);
   }
 
-  @ApiOperation({ summary: 'Norma miqdorini va tarixini o\'zgartirish' })
-  @ApiResponse({ status: 200, description: 'Norma muvaffaqiyatli o\'zgartirildi' })
+  @ApiOperation({ summary: 'Norma miqdorini yoki yoqilg\'i narxini sanaga bog\'liq holda o\'zgartirish' })
+  @ApiResponse({ status: 200, description: 'Tarix muvaffaqiyatli yangilandi' })
   @ApiResponse({ status: 404, description: 'Norma topilmadi' })
+  @ApiResponse({ status: 400, description: 'Xato so\'rov' })
   @ApiResponse({ status: 401, description: 'Ruxsat yo\'q' })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
-  @Patch(':id/change-norm')
-  changeNorm(
+  @Patch(':id/history')
+  async updateHistory(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() changeCarFuelNormDto: ChangeCarFuelNormDto,
+    @Body() dto: UpdateCarFuelNormHistoryDto,
   ) {
-    return this.carFuelNormService.changeNorm(id, changeCarFuelNormDto);
+    try {
+      return await this.sequelize.transaction(async (t) => {
+        await this.carFuelNormService.updateNormHistoryEntry(
+          id,
+          dto.effective_from,
+          t,
+          dto.norm_per_100km,
+          dto.price,
+        );
+        return { message: 'Tarix muvaffaqiyatli yangilandi' };
+      });
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      console.error('CarFuelNorm history update error:', error);
+      throw new InternalServerErrorException(
+        "Norma tarixini yangilashda xatolik yuz berdi",
+      );
+    }
   }
 
   @ApiOperation({ summary: "ID bo'yicha norma o'chirish" })

@@ -100,6 +100,13 @@ export class CarDailyExpenseService {
         //   );
         // }
 
+        const historicalPrice = await this.carFuelNormHistoryService.getPriceForDate(
+          carFuelNorm.id,
+          dto.date,
+          t,
+        );
+        const fuel_price_at_time = historicalPrice ?? fuel.price;
+
         const expense = await this.expenseRepo.create(
           {
             car_id: dto.car_id,
@@ -111,7 +118,7 @@ export class CarDailyExpenseService {
             mileage,
             received_amount,
             fuel_expence: 0, // recalculateCarChain tomonidan yangilanadi
-            fuel_price_at_time: fuel.price,
+            fuel_price_at_time,
             balance_after: 0, // recalculateCarChain tomonidan yangilanadi
             is_holiday: dto.is_holiday ?? false,
             note: dto.note,

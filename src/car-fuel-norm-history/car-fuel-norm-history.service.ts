@@ -59,4 +59,25 @@ export class CarFuelNormHistoryService {
 
     return historyRecord.norm_per_100km;
   }
+
+  async getPriceForDate(
+    carFuelNormId: string,
+    date: string,
+    t?: Transaction,
+  ): Promise<number | null> {
+    const historyRecord = await this.historyRepo.findOne({
+      where: {
+        car_fuel_norm_id: carFuelNormId,
+        effective_from: { [Op.lte]: date },
+        [Op.or]: [
+          { effective_to: null },
+          { effective_to: { [Op.gte]: date } },
+        ],
+      },
+      order: [['effective_from', 'DESC']],
+      transaction: t,
+    });
+
+    return historyRecord ? historyRecord.fuel_price_at_time : null;
+  }
 }
