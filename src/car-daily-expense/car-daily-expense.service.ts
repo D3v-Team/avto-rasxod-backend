@@ -413,6 +413,19 @@ export class CarDailyExpenseService {
         const newFuelId = dto.fuel_id ?? record.fuel_id;
         const newDate = dto.date ?? record.date;
 
+        // Yoqilg'i turi o'zgarsa norma borligini tekshiramiz
+        if (newFuelId !== record.fuel_id) {
+          const carFuelNorm = await this.carFuelNormRepo.findOne({
+            where: { car_id: record.car_id, fuel_id: newFuelId },
+            transaction: t,
+          });
+          if (!carFuelNorm) {
+            throw new NotFoundException(
+              "Bu mashina uchun shu yoqilg'i turida norma belgilanmagan",
+            );
+          }
+        }
+
         if (newFuelId !== record.fuel_id || newDate !== record.date) {
           const existing = await this.expenseRepo.findOne({
             where: { car_id: record.car_id, fuel_id: newFuelId, date: newDate },
@@ -1820,6 +1833,8 @@ export class CarDailyExpenseService {
 
       const normId = normIdMap.get(record.fuel_id);
       let normPerKm = 0;
+      let fuelPriceAtTime = record.fuel_price_at_time; // fallback: eski qiymat
+      
       if (normId) {
         // 2. O'sha kungi haqiqiy norma (tarixdan) olinadi
         normPerKm = await this.carFuelNormHistoryService.getNormForDate(
@@ -1827,6 +1842,16 @@ export class CarDailyExpenseService {
           record.date,
           t,
         );
+        
+        // 2.1 O'sha kungi haqiqiy narx (tarixdan) olinadi
+        const historicalPrice = await this.carFuelNormHistoryService.getPriceForDate(
+          normId,
+          record.date,
+          t,
+        );
+        if (historicalPrice !== null) {
+          fuelPriceAtTime = historicalPrice;
+        }
       }
 
       // 3. Yoqilg'i xarajati yangi normadan kelib chiqib hisoblanadi
@@ -1842,6 +1867,7 @@ export class CarDailyExpenseService {
         odometer_start,
         odometer_end,
         fuel_expence,
+        fuel_price_at_time: fuelPriceAtTime,
         norm_per_100km_at_time: normPerKm,
         balance_after,
       }, { transaction: t });
