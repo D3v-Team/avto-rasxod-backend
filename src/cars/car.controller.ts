@@ -21,6 +21,7 @@ import { CarService } from './car.service';
 import { CreateCarDto } from './dto/create-car.dto';
 import { UpdateCarDto } from './dto/update-car.dto';
 import { QueryCarDto } from './dto/query-car.dto';
+import { CorrectInitialSpeedometerDto } from './dto/correct-initial-speedometer.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles-auth-decorator';
@@ -93,6 +94,16 @@ export class CarController {
   @Patch('restore/:id')
   restore(@Param('id', ParseUUIDPipe) id: string) {
     return this.carService.restore(id);
+  }
+
+  @Patch(':id/correct-initial-speedometer')
+  @ApiOperation({ summary: "Mashinaning boshlang'ich spidometr ko'rsatkichini tuzatish (butun xarajatlar zanjiri qayta hisoblanadi)" })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  correctInitialSpeedometer(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CorrectInitialSpeedometerDto,
+  ) {
+    return this.carService.correctInitialSpeedometer(id, dto);
   }
 
   @ApiResponse({ status: 404, description: 'Mashina topilmadi' })

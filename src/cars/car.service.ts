@@ -17,6 +17,7 @@ import { CarDailyExpense } from '../car-daily-expense/models/car-daily-expense.m
 import { CreateCarDto } from './dto/create-car.dto';
 import { UpdateCarDto } from './dto/update-car.dto';
 import { QueryCarDto } from './dto/query-car.dto';
+import { CorrectInitialSpeedometerDto } from './dto/correct-initial-speedometer.dto';
 import { normalizeName } from '../common/utils/normalize-name.util';
 import { Fuel } from '../fuels/models/fuels.models';
 import { CarDailyExpenseService } from '../car-daily-expense/car-daily-expense.service';
@@ -244,6 +245,40 @@ export class CarService {
     }
   }
 
+  async correctInitialSpeedometer(
+    id: string,
+    dto: CorrectInitialSpeedometerDto,
+  ): Promise<Car> {
+    try {
+      return await this.sequelize.transaction(async (t) => {
+        const car = await this.carRepo.findByPk(id, {
+          transaction: t,
+          lock: t.LOCK.UPDATE,
+        });
+        if (!car) {
+          throw new NotFoundException('Mashina topilmadi');
+        }
+
+        await car.update(
+          { initial_odometer: dto.new_initial_speedometer },
+          { transaction: t },
+        );
+
+        // MUHIM: recalculateCarChain BUTUN ZANJIRNI initial_odometer dan
+        // boshlab qayta hisoblab, odometer ni TO'G'RI (yakuniy) qiymatga O'ZI KELTIRADI
+        await this.carDailyExpenseService.recalculateCarChain(car.id, t);
+
+        return car;
+      });
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      console.error('Car correctInitialSpeedometer error:', error);
+      throw new InternalServerErrorException(
+        "Boshlang'ich spidometr ko'rsatkichini tuzatishda xatolik yuz berdi",
+      );
+    }
+  }
+
   async update(id: string, dto: UpdateCarDto): Promise<Car> {
     try {
       return await this.sequelize.transaction(async (t) => {
@@ -263,9 +298,6 @@ export class CarService {
         }
         if (dto.plate_number !== undefined) {
           normalizedDto.plate_number = normalizeName(dto.plate_number);
-        }
-        if (dto.odometer !== undefined) {
-          normalizedDto.initial_odometer = dto.odometer;
         }
 
         if (normalizedDto.plate_number) {
@@ -304,15 +336,7 @@ export class CarService {
           }
         }
 
-        const speedometerChanged =
-          normalizedDto.initial_odometer !== undefined &&
-          normalizedDto.initial_odometer !== car.initial_odometer;
-
         await car.update(normalizedDto, { transaction: t });
-
-        if (speedometerChanged) {
-          await this.carDailyExpenseService.recalculateCarChain(id, t);
-        }
 
         // Return the updated car. Since we already updated it, we can fetch it again with relations or just return the updated model instance.
         // To be consistent with findOne which populates relations, we fetch it via this.carRepo.findByPk with relations and transaction
