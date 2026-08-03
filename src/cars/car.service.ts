@@ -4,6 +4,8 @@ import {
   ConflictException,
   InternalServerErrorException,
   HttpException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectModel, InjectConnection } from '@nestjs/sequelize';
 import { FindOptions, Op } from 'sequelize';
@@ -17,6 +19,7 @@ import { UpdateCarDto } from './dto/update-car.dto';
 import { QueryCarDto } from './dto/query-car.dto';
 import { normalizeName } from '../common/utils/normalize-name.util';
 import { Fuel } from '../fuels/models/fuels.models';
+import { CarDailyExpenseService } from '../car-daily-expense/car-daily-expense.service';
 
 @Injectable()
 export class CarService {
@@ -28,6 +31,8 @@ export class CarService {
     @InjectModel(CarDailyExpense)
     private readonly carDailyExpenseRepo: typeof CarDailyExpense,
     @InjectConnection() private readonly sequelize: Sequelize,
+    @Inject(forwardRef(() => CarDailyExpenseService))
+    private readonly carDailyExpenseService: CarDailyExpenseService,
   ) { }
 
   async create(dto: CreateCarDto): Promise<Car> {
@@ -241,61 +246,102 @@ export class CarService {
 
   async update(id: string, dto: UpdateCarDto): Promise<Car> {
     try {
-      await this.findOne(id);
-
-      const normalizedDto: any = { ...dto };
-      if (dto.name !== undefined) {
-        normalizedDto.name = normalizeName(dto.name);
-      }
-      if (dto.plate_number !== undefined) {
-        normalizedDto.plate_number = normalizeName(dto.plate_number);
-      }
-      if (dto.odometer !== undefined) {
-        // Asosiy odometer o'zgarganda initial_odometer ni ham yangilaymiz,
-        // chunki UI faqat bitta odometer maydonini yuboradi
-        normalizedDto.initial_odometer = dto.odometer;
-      }
-
-      // Unikal tekshiruv normalizatsiya qilingan plate_number bo'yicha bajariladi
-      if (normalizedDto.plate_number) {
-        const existingCar = await this.carRepo.findOne({
-          where: {
-            plate_number: normalizedDto.plate_number,
-            id: { [Op.ne]: id },
-          },
+      return await this.sequelize.transaction(async (t) => {
+        // We use findOne inside transaction instead of this.findOne since this.findOne doesn't take transaction
+        const car = await this.carRepo.findByPk(id, {
+          transaction: t,
+          lock: t.LOCK.UPDATE,
         });
 
-        if (existingCar) {
-          throw new ConflictException(
-            `"${normalizedDto.plate_number}" davlat raqamli mashina allaqachon mavjud`,
+        if (!car) {
+          throw new NotFoundException(`ID ${id} bo'yicha mashina topilmadi`);
+        }
+
+        const normalizedDto: any = { ...dto };
+        if (dto.name !== undefined) {
+          normalizedDto.name = normalizeName(dto.name);
+        }
+        if (dto.plate_number !== undefined) {
+          normalizedDto.plate_number = normalizeName(dto.plate_number);
+        }
+        if (dto.odometer !== undefined) {
+          normalizedDto.initial_odometer = dto.odometer;
+        }
+
+        if (normalizedDto.plate_number) {
+          const existingCar = await this.carRepo.findOne({
+            where: {
+              plate_number: normalizedDto.plate_number,
+              id: { [Op.ne]: id },
+            },
+            transaction: t,
+          });
+
+          if (existingCar) {
+            throw new ConflictException(
+              `"${normalizedDto.plate_number}" davlat raqamli mashina allaqachon mavjud`,
+            );
+          }
+        }
+
+        if (normalizedDto.responsible_employee_id) {
+          const responsibleEmployee = await this.employeeRepo.findByPk(
+            normalizedDto.responsible_employee_id,
+            { transaction: t }
           );
+          if (!responsibleEmployee) {
+            throw new NotFoundException("Mas'ul xodim topilmadi");
+          }
         }
-      }
 
-      if (normalizedDto.responsible_employee_id) {
-        const responsibleEmployee = await this.employeeRepo.findByPk(
-          normalizedDto.responsible_employee_id,
-        );
-        if (!responsibleEmployee) {
-          throw new NotFoundException("Mas'ul xodim topilmadi");
+        if (normalizedDto.driver_id) {
+          const driverEmployee = await this.employeeRepo.findByPk(
+            normalizedDto.driver_id,
+            { transaction: t }
+          );
+          if (!driverEmployee) {
+            throw new NotFoundException('Haydovchi xodim topilmadi');
+          }
         }
-      }
 
-      if (normalizedDto.driver_id) {
-        const driverEmployee = await this.employeeRepo.findByPk(
-          normalizedDto.driver_id,
-        );
-        if (!driverEmployee) {
-          throw new NotFoundException('Haydovchi xodim topilmadi');
+        const speedometerChanged =
+          normalizedDto.initial_odometer !== undefined &&
+          normalizedDto.initial_odometer !== car.initial_odometer;
+
+        await car.update(normalizedDto, { transaction: t });
+
+        if (speedometerChanged) {
+          await this.carDailyExpenseService.recalculateCarChain(id, t);
         }
-      }
 
-      const car = await this.carRepo.update(normalizedDto, {
-        where: { id },
-        returning: true,
+        // Return the updated car. Since we already updated it, we can fetch it again with relations or just return the updated model instance.
+        // To be consistent with findOne which populates relations, we fetch it via this.carRepo.findByPk with relations and transaction
+        const updatedCar = await this.carRepo.findByPk(id, {
+          transaction: t,
+          include: [
+            {
+              model: Employee,
+              as: 'responsible_employee',
+              attributes: ['id', 'full_name', 'phone', 'role'],
+              required: false,
+            },
+            {
+              model: Employee,
+              as: 'driver',
+              attributes: ['id', 'full_name', 'phone', 'role'],
+              required: false,
+            },
+            {
+              model: CarFuelNorm,
+              as: 'car_fuel_norms',
+              attributes: ['current_balance'],
+              required: false,
+            },
+          ],
+        });
+        
+        return updatedCar!;
       });
-
-      return car[1][0];
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;

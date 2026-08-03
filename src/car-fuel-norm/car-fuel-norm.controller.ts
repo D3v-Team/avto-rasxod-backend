@@ -26,6 +26,7 @@ import { CreateCarFuelNormDto } from './dto/create-car-fuel-norm.dto';
 import { UpdateCarFuelNormDto } from './dto/update-car-fuel-norm.dto';
 import { QueryCarFuelNormDto } from './dto/query-car-fuel-norm.dto';
 import { UpdateCarFuelNormHistoryDto } from './dto/update-car-fuel-norm-history.dto';
+import { CorrectInitialBalanceDto } from './dto/correct-initial-balance.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { UserRole } from '../common/enums/user-role.enum';
@@ -95,6 +96,16 @@ export class CarFuelNormController {
     @Body() updateCarFuelNormDto: UpdateCarFuelNormDto,
   ) {
     return this.carFuelNormService.update(id, updateCarFuelNormDto);
+  }
+
+  @Patch(':id/correct-initial-balance')
+  @ApiOperation({ summary: "Yoqilg'i normasining boshlang'ich qoldig'ini tuzatish (butun zanjir qayta hisoblanadi)" })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
+  correctInitialBalance(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CorrectInitialBalanceDto,
+  ) {
+    return this.carFuelNormService.correctInitialBalance(id, dto);
   }
 
   @ApiOperation({ summary: 'Norma miqdorini yoki yoqilg\'i narxini sanaga bog\'liq holda o\'zgartirish' })

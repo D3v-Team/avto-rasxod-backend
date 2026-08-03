@@ -80,4 +80,12 @@ export class CarFuelNormHistoryService {
 
     return historyRecord ? historyRecord.fuel_price_at_time : null;
   }
+
+  async getHistoriesForNorms(carFuelNormIds: string[], transaction?: Transaction): Promise<CarFuelNormHistory[]> {
+    return this.historyRepo.findAll({
+      where: { car_fuel_norm_id: { [Op.in]: carFuelNormIds } },
+      order: [['effective_from', 'ASC']],
+      transaction,
+    });
+  }
 }

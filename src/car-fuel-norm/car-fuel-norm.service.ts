@@ -21,6 +21,7 @@ import { CarDailyExpenseService } from '../car-daily-expense/car-daily-expense.s
 import { CreateCarFuelNormDto } from './dto/create-car-fuel-norm.dto';
 import { UpdateCarFuelNormDto } from './dto/update-car-fuel-norm.dto';
 import { QueryCarFuelNormDto } from './dto/query-car-fuel-norm.dto';
+import { CorrectInitialBalanceDto } from './dto/correct-initial-balance.dto';
 import { normalizeName } from '../common/utils/normalize-name.util';
 
 // DIQQAT: CarFuelNorm modulida inson kiritadigan matnli maydonlar (nom, username v.b.) yo'q,
@@ -258,25 +259,77 @@ export class CarFuelNormService {
     }
   }
 
+  async correctInitialBalance(
+    id: string,
+    dto: CorrectInitialBalanceDto,
+  ): Promise<CarFuelNorm> {
+    try {
+      return await this.sequelize.transaction(async (t) => {
+        const carFuelNorm = await this.carFuelNormRepo.findByPk(id, {
+          transaction: t,
+          lock: t.LOCK.UPDATE,
+        });
+        if (!carFuelNorm) {
+          throw new NotFoundException(`ID ${id} bo'yicha norma topilmadi`);
+        }
+
+        await carFuelNorm.update(
+          { initial_balance: dto.new_initial_balance },
+          { transaction: t },
+        );
+
+        // MUHIM: current_balance BU YERDA QO'LDA YANGILANMAYDI —
+        // recalculateCarChain BUTUN ZANJIRNI initial_balance dan
+        // boshlab qayta hisoblab, current_balance ni TO'G'RI
+        // (yakuniy) qiymatga O'ZI KELTIRADI
+        await this.carDailyExpenseService.recalculateCarChain(
+          carFuelNorm.car_id,
+          t,
+        );
+
+        return carFuelNorm;
+      });
+    } catch (error) {
+      if (error instanceof HttpException) throw error;
+      console.error('CarFuelNorm correctInitialBalance error:', error);
+      throw new InternalServerErrorException(
+        "Boshlang'ich qoldiqni tuzatishda xatolik yuz berdi",
+      );
+    }
+  }
+
   async update(id: string, dto: UpdateCarFuelNormDto): Promise<CarFuelNorm> {
     try {
-      const existing = await this.findOne(id);
-
       return await this.sequelize.transaction(async (t) => {
-        const carFuelNorm = await this.carFuelNormRepo.update(dto, {
-          where: { id },
-          returning: true,
+        const norm = await this.carFuelNormRepo.findByPk(id, {
+          transaction: t,
+          lock: t.LOCK.UPDATE,
+        });
+        
+        if (!norm) {
+          throw new NotFoundException(`ID ${id} bo'yicha norma topilmadi`);
+        }
+
+        await norm.update(dto, { transaction: t });
+
+        // Trigger full recalculation because initial_balance or norm_per_100km might have changed
+        await this.carDailyExpenseService.recalculateCarChain(norm.car_id, t);
+
+        const updatedNorm = await this.carFuelNormRepo.findByPk(id, {
+          include: [
+            {
+              model: Car,
+              as: 'car',
+            },
+            {
+              model: Fuel,
+              as: 'fuel',
+            },
+          ],
           transaction: t,
         });
 
-        if (dto.initial_balance !== undefined || dto.current_balance !== undefined) {
-          await this.carDailyExpenseService.recalculateCarChain(
-            existing.car_id,
-            t,
-          );
-        }
-
-        return carFuelNorm[1][0];
+        return updatedNorm!;
       });
     } catch (error) {
       if (error instanceof HttpException) {
