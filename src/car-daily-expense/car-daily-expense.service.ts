@@ -1817,14 +1817,46 @@ export class CarDailyExpenseService {
       normIdMap.set(cfn.fuel_id, cfn.id);
     }
 
-    for (let i = 0; i < records.length; i++) {
-      await records[i].update(
-        { sequence_no: -(i + 1) },
-        { transaction: t },
+    // Unikal indeks xatoligini oldini olish uchun sequence_no ni vaqtincha manfiy qilish
+    // N ta alohida UPDATE o'rniga yagona bulkCreate orqali tezlashtirish
+    if (records.length > 0) {
+      await this.expenseRepo.bulkCreate(
+        records.map((r, i) => ({
+          ...r.get({ plain: true }),
+          sequence_no: -(i + 1),
+        })),
+        {
+          updateOnDuplicate: ['id', 'sequence_no', 'odometer_start', 'odometer_end', 'balance_after', 'updatedAt'],
+          conflictAttributes: ['id'],
+          transaction: t,
+        } as any,
       );
     }
 
-    // ── 1-BOSQICH: haqiqiy qiymatlarni hisoblab, yozib chiqamiz ──
+    // ── 1-BOSQICH: Tarixdagi barcha normalarni BIR martalik so'rov bilan olish ──
+    const normIds = Array.from(normIdMap.values());
+    const allNormHistories = normIds.length > 0
+      ? await this.carFuelNormHistoryService.getHistoriesForNorms(normIds, t)
+      : [];
+
+    // Kesh qilingan normalardan to'g'ri sanadagi normani qidirish yordamchi funksiyasi
+    const getNormAndPriceFromCache = (normId: string, date: string) => {
+      let normPerKm = 0;
+      let price: number | null = null;
+      for (const h of allNormHistories) {
+        if (h.car_fuel_norm_id === normId) {
+          if (h.effective_from <= date && (!h.effective_to || h.effective_to >= date)) {
+            normPerKm = h.norm_per_100km;
+            price = h.fuel_price_at_time;
+          }
+        }
+      }
+      return { normPerKm, price };
+    };
+
+    const updates: any[] = [];
+
+    // ── 2-BOSQICH: haqiqiy qiymatlarni hisoblab, massivga yig'ish ──
     for (const record of records) {
       sequenceCounter++;
       // 1. Odometer qayta hisoblanadi
@@ -1836,21 +1868,11 @@ export class CarDailyExpenseService {
       let fuelPriceAtTime = record.fuel_price_at_time; // fallback: eski qiymat
       
       if (normId) {
-        // 2. O'sha kungi haqiqiy norma (tarixdan) olinadi
-        normPerKm = await this.carFuelNormHistoryService.getNormForDate(
-          normId,
-          record.date,
-          t,
-        );
-        
-        // 2.1 O'sha kungi haqiqiy narx (tarixdan) olinadi
-        const historicalPrice = await this.carFuelNormHistoryService.getPriceForDate(
-          normId,
-          record.date,
-          t,
-        );
-        if (historicalPrice !== null) {
-          fuelPriceAtTime = historicalPrice;
+        // 2. O'sha kungi haqiqiy norma va narx keshdan olinadi
+        const cached = getNormAndPriceFromCache(normId, record.date);
+        normPerKm = cached.normPerKm;
+        if (cached.price !== null) {
+          fuelPriceAtTime = cached.price;
         }
       }
 
@@ -1862,7 +1884,8 @@ export class CarDailyExpenseService {
       const balance_after = prevBalance + (record.received_amount ?? 0) - fuel_expence;
       balanceMap.set(record.fuel_id, balance_after);
 
-      await record.update({
+      updates.push({
+        ...record.get({ plain: true }),
         sequence_no: sequenceCounter,
         odometer_start,
         odometer_end,
@@ -1870,9 +1893,26 @@ export class CarDailyExpenseService {
         fuel_price_at_time: fuelPriceAtTime,
         norm_per_100km_at_time: normPerKm,
         balance_after,
-      }, { transaction: t });
+      });
 
       runningOdometer = odometer_end;
+    }
+
+    // ── 3-BOSQICH: barchasini 1 ta bulkCreate orqali bazaga yozish ──
+    if (updates.length > 0) {
+      await this.expenseRepo.bulkCreate(updates, {
+        updateOnDuplicate: [
+          'sequence_no',
+          'odometer_start',
+          'odometer_end',
+          'fuel_expence',
+          'fuel_price_at_time',
+          'norm_per_100km_at_time',
+          'balance_after',
+        ],
+        conflictAttributes: ['id'],
+        transaction: t,
+      } as any);
     }
 
     // 5. Yakuniy holat saqlanadi
@@ -1881,9 +1921,20 @@ export class CarDailyExpenseService {
       last_sequence_no: sequenceCounter,
     }, { transaction: t });
 
-    for (const cfn of carFuelNorms) {
-      const finalBalance = balanceMap.has(cfn.fuel_id) ? balanceMap.get(cfn.fuel_id)! : cfn.initial_balance;
-      await cfn.update({ current_balance: finalBalance }, { transaction: t });
+    // 6. Car fuel norms balansi bulk bilan saqlanadi
+    if (carFuelNorms.length > 0) {
+      await this.carFuelNormRepo.bulkCreate(
+        carFuelNorms.map((cfn) => ({
+          ...cfn.get({ plain: true }),
+          current_balance: balanceMap.has(cfn.fuel_id)
+            ? balanceMap.get(cfn.fuel_id)!
+            : cfn.initial_balance,
+        })),
+        {
+          updateOnDuplicate: ['current_balance'],
+          transaction: t,
+        },
+      );
     }
   }
 }
