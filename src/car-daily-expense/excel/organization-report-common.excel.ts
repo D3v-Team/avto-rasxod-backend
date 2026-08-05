@@ -1,157 +1,301 @@
 import * as ExcelJS from 'exceljs';
 
 export const CYRILLIC_MONTHS: Record<number, string> = {
-  1: 'Январь',
-  2: 'Феврал',
-  3: 'Март',
-  4: 'Апрель',
-  5: 'Май',
-  6: 'Июнь',
-  7: 'Июль',
-  8: 'Август',
-  9: 'Сентябр',
-  10: 'Октябр',
-  11: 'Ноябр',
-  12: 'Декабр',
+  1: 'Январь', 2: 'Феврал', 3: 'Март', 4: 'Апрель',
+  5: 'Май', 6: 'Июнь', 7: 'Июль', 8: 'Август',
+  9: 'Сентябр', 10: 'Октябр', 11: 'Ноябр', 12: 'Декабр',
 };
 
-// 1. Dinamik fuel ustunlari header qurish
+export function setupPageSettings(worksheet: ExcelJS.Worksheet) {
+  worksheet.pageSetup = {
+    orientation: 'landscape',
+    paperSize: 9, // A4
+    fitToPage: true,
+    fitToWidth: 1,
+    fitToHeight: 0,
+    margins: { left: 0.2, right: 0.2, top: 0.3, bottom: 0.3, header: 0, footer: 0 },
+  };
+}
+
 export function buildHeaderRows(
   worksheet: ExcelJS.Worksheet,
   year: number,
-  monthName: string,
-  fuels: any[]
-): { totalCols: number, totalSumCol: number, holidayStartCol: number } {
-  const totalCols = 4 + fuels.length * 4 + 1 + 3;
+  monthName: string
+): { totalCols: number } {
+  const totalCols = 19;
 
+  // 1-qator: Sarlavha
   worksheet.mergeCells(1, 1, 1, totalCols);
   const titleCell = worksheet.getCell(1, 1);
-  titleCell.value = `ЎКУФ Сирдарё вилоят кенгаши балансидаги автотранспорт воситалари томонидан ${year} йил ${monthName} ойида сарфланган ёқилғи харажатлари бўйича Хисобот`;
-  titleCell.font = { name: 'Arial', size: 12, bold: true };
+  titleCell.value = `ЎҚУФ Сирдарё вилоят кенгаши балансидаги автотранспорт воситалари томонидан ${year} йил ${monthName} ойида сарфланган ёқилғи харажатлари бўйича\nҲисобот`;
+  titleCell.font = { name: 'Arial', size: 10, bold: true };
   titleCell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
   worksheet.getRow(1).height = 35;
 
+  // 2 va 3-qator: Ustunlar sarlavhasi (Rasmdagidek)
   worksheet.mergeCells(2, 1, 3, 1);
   worksheet.getCell(2, 1).value = '№';
 
-  worksheet.mergeCells(2, 2, 3, 2); 
-  worksheet.getCell(2, 2).value = 'Автомобиль маркаси ва номери';
+  worksheet.mergeCells(2, 2, 3, 2);
+  worksheet.getCell(2, 2).value = 'Бириктирилган масъуллар';
 
-  worksheet.mergeCells(2, 3, 3, 3); 
-  worksheet.getCell(2, 3).value = 'Бириктирилган масъуллар';
+  worksheet.mergeCells(2, 3, 3, 3);
+  worksheet.getCell(2, 3).value = 'Юрилган\nмасофа км';
 
-  worksheet.mergeCells(2, 4, 3, 4); 
-  worksheet.getCell(2, 4).value = 'Юрилган масофа км';
-  
-  let currentColIndex = 5; 
+  // Ой бошига қолдиқ
+  worksheet.mergeCells(2, 4, 2, 6);
+  worksheet.getCell(2, 4).value = 'Ой бошига қолдиқ';
+  worksheet.getCell(3, 4).value = 'Бензин\nлитр';
+  worksheet.getCell(3, 5).value = 'газ м3';
+  worksheet.getCell(3, 6).value = 'Пропан\nлитр';
 
-  fuels.forEach((fuel) => {
-    const startCol = currentColIndex;
-    const endCol = currentColIndex + 3;
-    worksheet.mergeCells(2, startCol, 2, endCol);
-    worksheet.getCell(2, startCol).value = `${fuel.name} (${fuel.unit})`;
+  // Ой давомида сарфланган
+  worksheet.mergeCells(2, 7, 2, 13);
+  worksheet.getCell(2, 7).value = 'Ой давомида сарфланган';
+  worksheet.getCell(3, 7).value = 'Бензин\nлитр';
+  worksheet.getCell(3, 8).value = 'суммаси';
+  worksheet.getCell(3, 9).value = 'газ м3';
+  worksheet.getCell(3, 10).value = 'суммаси';
+  worksheet.getCell(3, 11).value = 'Пропан\nлитр';
+  worksheet.getCell(3, 12).value = 'суммаси';
+  worksheet.getCell(3, 13).value = 'Умумий\nсуммаси';
 
-    worksheet.getCell(3, startCol).value = 'Ой бошига қолдиқ';
-    worksheet.getCell(3, startCol + 1).value = 'Ой давомида сарфланган';
-    worksheet.getCell(3, startCol + 2).value = 'Суммаси';
-    worksheet.getCell(3, startCol + 3).value = 'Ой охирига қолдиқ';
+  // Ой охирига қолдиқ
+  worksheet.mergeCells(2, 14, 2, 16);
+  worksheet.getCell(2, 14).value = 'Ой охирига қолдиқ';
+  worksheet.getCell(3, 14).value = 'Бензин\nлитр';
+  worksheet.getCell(3, 15).value = 'газ м3';
+  worksheet.getCell(3, 16).value = 'Пропан\nлитр';
 
-    currentColIndex += 4;
-  });
-
-  const totalSumCol = currentColIndex;
-  worksheet.mergeCells(2, totalSumCol, 3, totalSumCol);
-  worksheet.getCell(2, totalSumCol).value = 'Умумий суммаси';
-  currentColIndex += 1;
-
-  const holidayStartCol = currentColIndex;
-  worksheet.mergeCells(2, holidayStartCol, 2, holidayStartCol + 2);
-  worksheet.getCell(2, holidayStartCol).value = 'Дам олиш кунлари ва байрам саналарида';
-  worksheet.getCell(3, holidayStartCol).value = 'км';
-  worksheet.getCell(3, holidayStartCol + 1).value = 'миқдор';
-  worksheet.getCell(3, holidayStartCol + 2).value = 'суммаси';
+  // Дам олиш кунлари ва байрам саналарида
+  worksheet.mergeCells(2, 17, 2, 19);
+  worksheet.getCell(2, 17).value = 'Дам олиш кунлари ва\nбайрам саналарида';
+  worksheet.getCell(3, 17).value = 'км';
+  worksheet.getCell(3, 18).value = 'Литр/\nм3';
+  worksheet.getCell(3, 19).value = 'Суммаси';
 
   [2, 3].forEach((rowNum) => {
     const row = worksheet.getRow(rowNum);
-    row.height = 25;
+    row.height = rowNum === 2 ? 18 : 26;
     row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
       if (colNumber <= totalCols) {
-        cell.font = { name: 'Arial', size: 10, bold: true };
+        cell.font = { name: 'Arial', size: 7.5, bold: true };
         cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-        cell.fill = {
-          type: 'pattern',
-          pattern: 'solid',
-          fgColor: { argb: 'FFE6ECEF' },
-        };
-        cell.border = {
-          top: { style: 'thin' },
-          left: { style: 'thin' },
-          bottom: { style: 'thin' },
-          right: { style: 'thin' },
-        };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } };
+        cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
       }
     });
   });
 
-  return { totalCols, totalSumCol, holidayStartCol };
+  setColumnWidths(worksheet, totalCols);
+  return { totalCols };
 }
 
-// 2. Raqam formatlash va border qo'yish
-export function formatDataRow(row: ExcelJS.Row, totalCols: number, isSummary: boolean = false, isGroupHeader: boolean = false, bgColor: string = '') {
+export function setColumnWidths(worksheet: ExcelJS.Worksheet, totalCols: number = 19) {
+  const widths = [3.5, 26, 7.5, 5.5, 5.5, 5.5, 5.5, 9, 5.5, 9, 5.5, 9, 10.5, 5.5, 5.5, 5.5, 4.5, 4.5, 6.5];
+  for (let c = 1; c <= totalCols; c++) {
+    worksheet.getColumn(c).width = widths[c - 1] || 8;
+  }
+}
+
+export function formatDataRow(
+  row: ExcelJS.Row,
+  totalCols: number = 19,
+  isSummary: boolean = false,
+  isGroupHeader: boolean = false,
+  bgColor: string = ''
+) {
+  row.height = isGroupHeader ? 18 : isSummary ? 20 : 28;
+
   for (let colNumber = 1; colNumber <= totalCols; colNumber++) {
     const cell = row.getCell(colNumber);
-    cell.border = {
-      top: { style: 'thin' },
-      left: { style: 'thin' },
-      bottom: { style: 'thin' },
-      right: { style: 'thin' },
-    };
+    cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
 
     if (isGroupHeader) {
-      cell.font = { name: 'Arial', size: 11, bold: true };
-      if (bgColor) {
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor } };
-      }
-      if (colNumber === 1 || colNumber === 2) {
-         cell.alignment = { vertical: 'middle', horizontal: 'left' };
-      }
+      cell.font = { name: 'Arial', size: 8, bold: true };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor || 'FFFAFAFA' } };
+      cell.alignment = { vertical: 'middle', horizontal: 'center' };
     } else if (isSummary) {
-      cell.font = { name: 'Arial', size: 10, bold: true };
-      if (bgColor) {
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor } };
-      }
-      if (colNumber === 2 || colNumber === 3) {
-        cell.alignment = { vertical: 'middle', horizontal: 'left' };
-      } else if (colNumber === 1) {
-        cell.alignment = { vertical: 'middle', horizontal: 'center' };
-      } else {
-        cell.alignment = { vertical: 'middle', horizontal: 'right' };
-        if (cell.value !== '—') {
-          cell.numFmt = '#,##0';
-        }
-      }
+      cell.font = { name: 'Arial', size: 8, bold: true };
+      if (bgColor) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor } };
+      cell.alignment = { vertical: 'middle', horizontal: colNumber === 2 ? 'center' : 'right' };
+      if (typeof cell.value === 'number') cell.numFmt = '#,##0';
     } else {
-      if (colNumber === 2 || colNumber === 3) {
-        cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
-      } else if (colNumber === 1) {
-        cell.alignment = { vertical: 'middle', horizontal: 'center' };
-      } else {
+      cell.font = { name: 'Arial', size: 7.5 };
+      if (bgColor) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor } };
+
+      if (colNumber === 1) cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      else if (colNumber === 2) cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
+      else {
         cell.alignment = { vertical: 'middle', horizontal: 'right' };
-        if (cell.value !== '—' && typeof cell.value === 'number') {
-           cell.numFmt = '#,##0';
-        }
+        if (typeof cell.value === 'number' && cell.value !== 0) cell.numFmt = '#,##0';
       }
     }
   }
 }
 
-export function setColumnWidths(worksheet: ExcelJS.Worksheet, totalCols: number) {
-  worksheet.getColumn(1).width = 6;
-  worksheet.getColumn(2).width = 25; 
-  worksheet.getColumn(3).width = 28; 
-  worksheet.getColumn(4).width = 16; 
-  
-  for (let c = 5; c <= totalCols; c++) {
-    worksheet.getColumn(c).width = 16;
+export async function generateOrganizationReportWorkbook(reportData: any): Promise<Buffer> {
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet('Хисобот');
+
+  setupPageSettings(worksheet);
+
+  const year = reportData.year;
+  const month = reportData.month;
+  const monthName = CYRILLIC_MONTHS[month] || `${month}-ой`;
+
+  const { totalCols } = buildHeaderRows(worksheet, year, monthName);
+  let currentRowIndex = 4;
+
+  if (Array.isArray(reportData.groups)) {
+    reportData.groups.forEach((group: any, groupIdx: number) => {
+
+      if (Array.isArray(group.cars)) {
+        group.cars.forEach((carItem: any, carIdx: number) => {
+
+          // 1. Mashina modeli va raqami (Alohida guruh sarlavhasi qatori)
+          const carHeaderRow = worksheet.getRow(currentRowIndex);
+          const carName = carItem.car?.name || '';
+          const plateNumber = carItem.car?.plate_number || '';
+
+          worksheet.mergeCells(currentRowIndex, 1, currentRowIndex, totalCols);
+          carHeaderRow.getCell(1).value = `${carName.toUpperCase()} - ${plateNumber.toUpperCase()}`;
+          formatDataRow(carHeaderRow, totalCols, false, true, 'FFFAFAFA');
+          currentRowIndex++;
+
+          // 2. Avto ma'lumotlari haqiqiy qatori
+          const row = worksheet.getRow(currentRowIndex);
+
+          const benzin = carItem.fuels?.find((f: any) => f.fuel_name?.toLowerCase().includes('benzin') || f.fuel_id === 'benzin');
+          const gaz = carItem.fuels?.find((f: any) => f.fuel_name?.toLowerCase().includes('gaz') || f.fuel_id === 'gaz');
+          const propan = carItem.fuels?.find((f: any) => f.fuel_name?.toLowerCase().includes('propan') || f.fuel_id === 'propan');
+
+          const respName = carItem.car?.responsible_employee?.full_name || group.responsible_employee?.full_name || '';
+          const respRole = carItem.car?.responsible_employee?.role || group.responsible_employee?.role || 'Масъул';
+          const drvName = carItem.car?.driver?.full_name || '—';
+
+          // 1-ustun (A): №
+          row.getCell(1).value = groupIdx + 1;
+
+          // 2-ustun (B): Mas'ul va Haydovchi ismlari
+          let respStr = respName ? `${respRole}: ${respName}` : '';
+          let drvStr = drvName !== '—' ? `Ҳайдовчи: ${drvName}` : '';
+          row.getCell(2).value = [respStr, drvStr].filter(Boolean).join('\n') || '—';
+
+          // 3-ustun (C): Юрилган масофа км
+          row.getCell(3).value = Number(carItem.total_mileage) || 0;
+
+          // 4-6 ustunlar (D, E, F): Ой бошига қолдиқ (Benzin, Gaz, Propan)
+          row.getCell(4).value = Number(benzin?.start_balance) || 0;
+          row.getCell(5).value = Number(gaz?.start_balance) || 0;
+          row.getCell(6).value = Number(propan?.start_balance) || 0;
+
+          // 7-12 ustunlar (G, H, I, J, K, L): Ой давомида сарфланган (olingan yoqilg'i jami hajmi va summasi)
+          row.getCell(7).value = Number(benzin?.consumed_amount) || 0;
+          row.getCell(8).value = Number(benzin?.consumed_sum) || 0;
+          row.getCell(9).value = Number(gaz?.consumed_amount) || 0;
+          row.getCell(10).value = Number(gaz?.consumed_sum) || 0;
+          row.getCell(11).value = Number(propan?.consumed_amount) || 0;
+          row.getCell(12).value = Number(propan?.consumed_sum) || 0;
+
+          // 13-ustun (M): Умумий суммаси (Benzin summasi [H] + Gaz summasi [J] + Propan summasi [L])
+          // Dynamic ravishda joriy qator formulasini beramiz: H + J + L
+          row.getCell(13).value = { formula: `H${currentRowIndex}+J${currentRowIndex}+L${currentRowIndex}` };
+
+          // 14-16 ustunlar (N, O, P): Ой охирига қолдиқ
+          row.getCell(14).value = Number(benzin?.end_balance) || 0;
+          row.getCell(15).value = Number(gaz?.end_balance) || 0;
+          row.getCell(16).value = Number(propan?.end_balance) || 0;
+
+          // 17-19 ustunlar (Q, R, S): Дам олиш кунлари
+          row.getCell(17).value = Number(carItem.holiday?.km) || 0;
+          row.getCell(18).value = Number(carItem.holiday?.amount) || 0;
+          row.getCell(19).value = Number(carItem.holiday?.sum) || 0;
+
+          formatDataRow(row, totalCols, false, false);
+          currentRowIndex++;
+        });
+      }
+
+      // 3. GURUH BO'YICHA JAMI (Жами qatori)
+      const groupTotal = group.group_total;
+      if (groupTotal) {
+        const groupTotalRow = worksheet.getRow(currentRowIndex);
+
+        groupTotalRow.getCell(2).value = 'Жами';
+        groupTotalRow.getCell(3).value = Number(groupTotal.total_mileage) || 0;
+
+        // Qoldiqlar jami "—" bo'ladi
+        groupTotalRow.getCell(4).value = '—';
+        groupTotalRow.getCell(5).value = '—';
+        groupTotalRow.getCell(6).value = '—';
+
+        const gtBenzin = groupTotal.fuels?.find((f: any) => f.fuel_name?.toLowerCase().includes('benzin') || f.fuel_id === 'benzin');
+        const gtGaz = groupTotal.fuels?.find((f: any) => f.fuel_name?.toLowerCase().includes('gaz') || f.fuel_id === 'gaz');
+        const gtPropan = groupTotal.fuels?.find((f: any) => f.fuel_name?.toLowerCase().includes('propan') || f.fuel_id === 'propan');
+
+        groupTotalRow.getCell(7).value = Number(gtBenzin?.total_consumed_amount) || 0;
+        groupTotalRow.getCell(8).value = Number(gtBenzin?.total_consumed_sum) || 0;
+        groupTotalRow.getCell(9).value = Number(gtGaz?.total_consumed_amount) || 0;
+        groupTotalRow.getCell(10).value = Number(gtGaz?.total_consumed_sum) || 0;
+        groupTotalRow.getCell(11).value = Number(gtPropan?.total_consumed_amount) || 0;
+        groupTotalRow.getCell(12).value = Number(gtPropan?.total_consumed_sum) || 0;
+        
+        // Guruh umumiy summasi formula orqali: H + J + L
+        groupTotalRow.getCell(13).value = { formula: `H${currentRowIndex}+J${currentRowIndex}+L${currentRowIndex}` };
+
+        groupTotalRow.getCell(14).value = '—';
+        groupTotalRow.getCell(15).value = '—';
+        groupTotalRow.getCell(16).value = '—';
+
+        groupTotalRow.getCell(17).value = Number(groupTotal.holiday?.km) || 0;
+        groupTotalRow.getCell(18).value = Number(groupTotal.holiday?.amount) || 0;
+        groupTotalRow.getCell(19).value = Number(groupTotal.holiday?.sum) || 0;
+
+        formatDataRow(groupTotalRow, totalCols, true, false, 'FFF0F0F0');
+        currentRowIndex++;
+      }
+    });
   }
+
+  // 4. GRAND TOTAL (Умумий жами)
+  const grandTotal = reportData.grand_total;
+  if (grandTotal) {
+    const summaryRow = worksheet.getRow(currentRowIndex);
+    summaryRow.getCell(2).value = 'Умумий жами';
+    summaryRow.getCell(3).value = Number(grandTotal.total_mileage) || 0;
+
+    summaryRow.getCell(4).value = '—';
+    summaryRow.getCell(5).value = '—';
+    summaryRow.getCell(6).value = '—';
+
+    const grandBenzin = grandTotal.fuels?.find((f: any) => f.fuel_name?.toLowerCase().includes('benzin') || f.fuel_id === 'benzin');
+    const grandGaz = grandTotal.fuels?.find((f: any) => f.fuel_name?.toLowerCase().includes('gaz') || f.fuel_id === 'gaz');
+    const grandPropan = grandTotal.fuels?.find((f: any) => f.fuel_name?.toLowerCase().includes('propan') || f.fuel_id === 'propan');
+
+    summaryRow.getCell(7).value = Number(grandBenzin?.total_consumed_amount) || 0;
+    summaryRow.getCell(8).value = Number(grandBenzin?.total_consumed_sum) || 0;
+    summaryRow.getCell(9).value = Number(grandGaz?.total_consumed_amount) || 0;
+    summaryRow.getCell(10).value = Number(grandGaz?.total_consumed_sum) || 0;
+    summaryRow.getCell(11).value = Number(grandPropan?.total_consumed_amount) || 0;
+    summaryRow.getCell(12).value = Number(grandPropan?.total_consumed_sum) || 0;
+    
+    // Umumiy jami summasi ham formula orqali: H + J + L
+    summaryRow.getCell(13).value = { formula: `H${currentRowIndex}+J${currentRowIndex}+L${currentRowIndex}` };
+
+    summaryRow.getCell(14).value = '—';
+    summaryRow.getCell(15).value = '—';
+    summaryRow.getCell(16).value = '—';
+
+    summaryRow.getCell(17).value = Number(grandTotal.holiday?.km) || 0;
+    summaryRow.getCell(18).value = Number(grandTotal.holiday?.amount) || 0;
+    summaryRow.getCell(19).value = Number(grandTotal.holiday?.sum) || 0;
+
+    formatDataRow(summaryRow, totalCols, true, false, 'FFD3D3D3');
+  }
+
+  setColumnWidths(worksheet, totalCols);
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  return Buffer.from(buffer);
 }
