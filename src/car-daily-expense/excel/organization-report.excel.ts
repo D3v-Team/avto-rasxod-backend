@@ -1,156 +1,200 @@
 import * as ExcelJS from 'exceljs';
-import { buildHeaderRows, formatDataRow, setColumnWidths, CYRILLIC_MONTHS } from './organization-report-common.excel';
+import {
+  buildHeaderRows,
+  setColumnWidths,
+  applyA4LandscapeSetup,
+  styleDataCell,
+  CYRILLIC_MONTHS,
+  CAR_TITLE_FILL,
+  JAMI_FILL,
+  GRAND_FILL,
+  MAX_FUELS_PER_SHEET,
+  FuelRef,
+} from './organization-report-common.excel';
 
 export async function generateOrganizationReportWorkbook(
   reportData: any,
 ): Promise<Buffer> {
   const workbook = new ExcelJS.Workbook();
-  const worksheet = workbook.addWorksheet('Хисобот');
 
   const year = reportData.year;
   const month = reportData.month;
   const monthName = CYRILLIC_MONTHS[month] || `${month}-ой`;
+  const groups: any[] = Array.isArray(reportData.groups) ? reportData.groups : [];
 
-  // Dynamic fuels present in data
-  const fuelMap = new Map<string, { id: string; name: string; unit: string }>();
-  if (Array.isArray(reportData.groups)) {
-    reportData.groups.forEach((group: any) => {
-      if (Array.isArray(group.cars)) {
-        group.cars.forEach((carItem: any) => {
-          if (Array.isArray(carItem.fuels)) {
-            carItem.fuels.forEach((f: any) => {
-              if (!fuelMap.has(f.fuel_id)) {
-                fuelMap.set(f.fuel_id, {
-                  id: f.fuel_id,
-                  name: f.fuel_name,
-                  unit: f.fuel_unit,
-                });
-              }
-            });
-          }
-        });
-      }
+  // Barcha yoqilg'i turlarini (dinamik) yig'ish
+  const fuelMap = new Map<string, FuelRef>();
+  groups.forEach((group) => {
+    (group.cars || []).forEach((carItem: any) => {
+      (carItem.fuels || []).forEach((f: any) => {
+        if (!fuelMap.has(f.fuel_id)) {
+          fuelMap.set(f.fuel_id, { id: f.fuel_id, name: f.fuel_name, unit: f.fuel_unit });
+        }
+      });
     });
+  });
+  const allFuels = Array.from(fuelMap.values());
+
+  // Yoqilg'i turlarini MAX_FUELS_PER_SHEET bo'yicha bo'laklarga bo'lish —
+  // har bir bo'lak ALOHIDA sheet'da chiqadi, A4 kengligiga sig'ishi uchun
+  const fuelChunks: FuelRef[][] = [];
+  for (let i = 0; i < allFuels.length; i += MAX_FUELS_PER_SHEET) {
+    fuelChunks.push(allFuels.slice(i, i + MAX_FUELS_PER_SHEET));
   }
-  const fuels = Array.from(fuelMap.values());
+  if (fuelChunks.length === 0) fuelChunks.push([]);
 
-  const { totalCols, totalSumCol, holidayStartCol } = buildHeaderRows(worksheet, year, monthName, fuels);
+  fuelChunks.forEach((fuelsForSheet, sheetIdx) => {
+    const sheetName = fuelChunks.length > 1 ? `Хисобот ${sheetIdx + 1}` : 'Хисобот';
+    const worksheet = workbook.addWorksheet(sheetName);
 
-  let currentRowIndex = 4;
-  if (Array.isArray(reportData.groups)) {
-    reportData.groups.forEach((group: any) => {
-      // 1. Group Header Row
-      const groupHeaderRow = worksheet.getRow(currentRowIndex);
-      groupHeaderRow.height = 30;
-      
-      const emp = group.responsible_employee;
-      const groupTitle = emp ? `${emp.role || 'Масъул'}: ${emp.full_name}` : 'Масъул бириктирилмаган';
-      
-      worksheet.mergeCells(currentRowIndex, 1, currentRowIndex, totalCols);
-      groupHeaderRow.getCell(1).value = groupTitle;
-      
-      formatDataRow(groupHeaderRow, totalCols, false, true, 'FFB0C4DE'); // LightSteelBlue for group header
-      currentRowIndex++;
+    const {
+      totalCols,
+      startBalanceCol,
+      consumedStartCol,
+      totalSumCol,
+      endBalanceCol,
+      holidayStartCol,
+    } = buildHeaderRows(worksheet, year, monthName, fuelsForSheet);
 
-      // 2. Cars in Group
-      if (Array.isArray(group.cars)) {
-        group.cars.forEach((carItem: any, index: number) => {
-          const row = worksheet.getRow(currentRowIndex);
-          row.height = 35;
+    let currentRow = 4;
+    let carNo = 1;
 
-          row.getCell(1).value = index + 1;
+    groups.forEach((group) => {
+      const cars: any[] = Array.isArray(group.cars) ? group.cars : [];
+      if (cars.length === 0) return;
 
-          const respName = carItem.car?.responsible_employee?.full_name || '—';
-          const drvName = carItem.car?.driver?.full_name || '—';
-          const carName = carItem.car?.name || '—';
-          const plateNumber = carItem.car?.plate_number || '—';
+      const groupStartRow = currentRow;
 
-          row.getCell(2).value = `${carName}\n(${plateNumber})`;
-          row.getCell(3).value = `Мас'ул: ${respName}\nХайдовчи: ${drvName}`;
-          row.getCell(4).value = Number(carItem.total_mileage) || 0;
+      cars.forEach((carItem: any) => {
+        const carName = carItem.car?.name || '—';
+        const plateNumber = carItem.car?.plate_number || '—';
 
-          let colIdx = 5; 
-          fuels.forEach((fuel) => {
-            const carFuel = carItem.fuels?.find((f: any) => f.fuel_id === fuel.id);
-            row.getCell(colIdx).value = carFuel ? Number(carFuel.start_balance) || 0 : 0;
-            row.getCell(colIdx + 1).value = carFuel ? Number(carFuel.consumed_amount) || 0 : 0;
-            row.getCell(colIdx + 2).value = carFuel ? Number(carFuel.consumed_sum) || 0 : 0;
-            row.getCell(colIdx + 3).value = carFuel ? Number(carFuel.end_balance) || 0 : 0;
-            colIdx += 4;
+        // Avto nomi — sarlavha qator, 3-ustundan oxirigacha merge
+        // (1 va 2-ustunlar bu qatorda BO'SH qoldiriladi, chunki 2-ustun
+        // guruh darajasida vertikal merge qilinadi, 1-ustunga esa
+        // ma'lumot qatorida raqam qo'yiladi)
+        worksheet.mergeCells(currentRow, 3, currentRow, totalCols);
+        const titleCell = worksheet.getCell(currentRow, 3);
+        titleCell.value = `${carName} - ${plateNumber}`;
+        styleDataCell(titleCell, { bold: true, fill: CAR_TITLE_FILL, align: 'center' });
+        for (let c = 1; c <= 2; c++) {
+          styleDataCell(worksheet.getCell(currentRow, c), { fill: CAR_TITLE_FILL });
+        }
+        worksheet.getRow(currentRow).height = 16;
+        currentRow++;
+
+        // Ma'lumot qatori
+        const dataRow = worksheet.getRow(currentRow);
+        dataRow.getCell(1).value = carNo;
+        dataRow.getCell(3).value = Number(carItem.total_mileage) || 0;
+
+        fuelsForSheet.forEach((fuel, i) => {
+          const cf = (carItem.fuels || []).find((f: any) => f.fuel_id === fuel.id);
+          dataRow.getCell(startBalanceCol + i).value = cf ? Number(cf.start_balance) || 0 : '';
+          const receivedCol = consumedStartCol + i * 2;
+          dataRow.getCell(receivedCol).value = cf ? Number(cf.received_amount) || 0 : '';
+          dataRow.getCell(receivedCol + 1).value = cf ? Number(cf.received_sum) || 0 : '';
+          dataRow.getCell(endBalanceCol + i).value = cf ? Number(cf.end_balance) || 0 : '';
+        });
+
+        const carReceivedSum = (carItem.fuels || []).reduce((acc: number, f: any) => acc + (Number(f.received_sum) || 0), 0);
+        dataRow.getCell(totalSumCol).value = carReceivedSum;
+        dataRow.getCell(holidayStartCol).value = Number(carItem.holiday?.km) || 0;
+        dataRow.getCell(holidayStartCol + 1).value = Number(carItem.holiday?.amount) || 0;
+        dataRow.getCell(holidayStartCol + 2).value = Number(carItem.holiday?.sum) || 0;
+
+        for (let c = 1; c <= totalCols; c++) {
+          styleDataCell(dataRow.getCell(c), {
+            align: c === 1 ? 'center' : 'right',
           });
+        }
+        dataRow.height = 20;
 
-          row.getCell(totalSumCol).value = Number(carItem.total_sum) || 0;
-          row.getCell(holidayStartCol).value = Number(carItem.holiday?.km) || 0;
-          row.getCell(holidayStartCol + 1).value = Number(carItem.holiday?.amount) || 0;
-          row.getCell(holidayStartCol + 2).value = Number(carItem.holiday?.sum) || 0;
+        carNo++;
+        currentRow++;
+      });
 
-          formatDataRow(row, totalCols, false, false);
-          currentRowIndex++;
-        });
+      const groupEndRow = currentRow - 1;
+
+      // Масъул ustuni — guruh boshidan Жami dan OLDINGI qatorgacha MERGE
+      const emp = group.responsible_employee;
+      const groupTitle = emp
+        ? `${emp.role || "Мас'ул"}: ${emp.full_name}`
+        : "Мас'ул бириктирилмаган";
+      worksheet.mergeCells(groupStartRow, 2, groupEndRow, 2);
+      const masulCell = worksheet.getCell(groupStartRow, 2);
+      masulCell.value = groupTitle;
+      styleDataCell(masulCell, { bold: true, align: 'left' });
+      for (let r = groupStartRow; r <= groupEndRow; r++) {
+        worksheet.getCell(r, 2).border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
       }
 
-      // 3. Group Total (Жами)
-      const groupTotal = group.group_total;
-      if (groupTotal) {
-        const groupTotalRow = worksheet.getRow(currentRowIndex);
-        groupTotalRow.height = 30;
+      // Жами qatori — guruh darajasida, alohida
+      const groupTotal = group.group_total || {};
+      const jamiRow = worksheet.getRow(currentRow);
+      jamiRow.getCell(2).value = 'Жами';
+      jamiRow.getCell(3).value = Number(groupTotal.total_mileage) || 0;
 
-        groupTotalRow.getCell(1).value = '';
-        groupTotalRow.getCell(2).value = 'Жами';
-        groupTotalRow.getCell(3).value = '—';
-        groupTotalRow.getCell(4).value = Number(groupTotal.total_mileage) || 0;
+      fuelsForSheet.forEach((fuel, i) => {
+        const gf = (groupTotal.fuels || []).find((f: any) => f.fuel_id === fuel.id);
+        // Qoldiqlar yig'indisi turli mashinalar orasida mantiqsiz — "—"
+        jamiRow.getCell(startBalanceCol + i).value = '—';
+        const consumedCol = consumedStartCol + i * 2;
+        jamiRow.getCell(consumedCol).value = gf ? Number(gf.total_received_amount) || 0 : 0;
+        jamiRow.getCell(consumedCol + 1).value = gf ? Number(gf.total_received_sum) || 0 : 0;
+        jamiRow.getCell(endBalanceCol + i).value = '—';
+      });
 
-        let colIdx = 5;
-        fuels.forEach((fuel) => {
-          const gtFuel = groupTotal.fuels?.find((f: any) => f.fuel_id === fuel.id);
-          groupTotalRow.getCell(colIdx).value = '—'; // Qoldiqlar yig'indisi mantiqsiz, "—" qo'yiladi
-          groupTotalRow.getCell(colIdx + 1).value = gtFuel ? Number(gtFuel.total_consumed_amount) || 0 : 0;
-          groupTotalRow.getCell(colIdx + 2).value = gtFuel ? Number(gtFuel.total_consumed_sum) || 0 : 0;
-          groupTotalRow.getCell(colIdx + 3).value = '—'; // Qoldiqlar yig'indisi mantiqsiz, "—" qo'yiladi
-          colIdx += 4;
+      const groupReceivedSum = (groupTotal.fuels || []).reduce((acc: number, f: any) => acc + (Number(f.total_received_sum) || 0), 0);
+      jamiRow.getCell(totalSumCol).value = groupReceivedSum;
+      jamiRow.getCell(holidayStartCol).value = Number(groupTotal.holiday?.km) || 0;
+      jamiRow.getCell(holidayStartCol + 1).value = Number(groupTotal.holiday?.amount) || 0;
+      jamiRow.getCell(holidayStartCol + 2).value = Number(groupTotal.holiday?.sum) || 0;
+
+      for (let c = 1; c <= totalCols; c++) {
+        styleDataCell(jamiRow.getCell(c), {
+          bold: true,
+          fill: JAMI_FILL,
+          align: c === 2 ? 'center' : 'right',
         });
-
-        groupTotalRow.getCell(totalSumCol).value = Number(groupTotal.total_sum) || 0;
-        groupTotalRow.getCell(holidayStartCol).value = Number(groupTotal.holiday?.km) || 0;
-        groupTotalRow.getCell(holidayStartCol + 1).value = Number(groupTotal.holiday?.amount) || 0;
-        groupTotalRow.getCell(holidayStartCol + 2).value = Number(groupTotal.holiday?.sum) || 0;
-
-        formatDataRow(groupTotalRow, totalCols, true, false, 'FFF0F0F0'); // Lighter gray for group total
-        currentRowIndex++;
       }
-    });
-  }
-
-  // Grand Total Row (Умумий жами)
-  const grandTotal = reportData.grand_total;
-  if (grandTotal) {
-    const summaryRow = worksheet.getRow(currentRowIndex);
-    summaryRow.height = 30;
-
-    summaryRow.getCell(1).value = '';
-    summaryRow.getCell(2).value = 'Умумий жами';
-    summaryRow.getCell(3).value = '—';
-    summaryRow.getCell(4).value = Number(grandTotal.total_mileage) || 0;
-
-    let colIdx = 5;
-    fuels.forEach((fuel) => {
-      const gtFuel = grandTotal.fuels?.find((f: any) => f.fuel_id === fuel.id);
-      summaryRow.getCell(colIdx).value = '—';
-      summaryRow.getCell(colIdx + 1).value = gtFuel ? Number(gtFuel.total_consumed_amount) || 0 : 0;
-      summaryRow.getCell(colIdx + 2).value = gtFuel ? Number(gtFuel.total_consumed_sum) || 0 : 0;
-      summaryRow.getCell(colIdx + 3).value = '—';
-      colIdx += 4;
+      jamiRow.height = 20;
+      currentRow++;
     });
 
-    summaryRow.getCell(totalSumCol).value = Number(grandTotal.total_sum) || 0;
-    summaryRow.getCell(holidayStartCol).value = Number(grandTotal.holiday?.km) || 0;
-    summaryRow.getCell(holidayStartCol + 1).value = Number(grandTotal.holiday?.amount) || 0;
-    summaryRow.getCell(holidayStartCol + 2).value = Number(grandTotal.holiday?.sum) || 0;
+    // ---- Умумий жами ----
+    const grandTotal = reportData.grand_total || {};
+    worksheet.mergeCells(currentRow, 1, currentRow, 2);
+    const grandLabelCell = worksheet.getCell(currentRow, 1);
+    grandLabelCell.value = 'Умумий жами';
+    styleDataCell(grandLabelCell, { bold: true, fill: GRAND_FILL, align: 'center' });
 
-    formatDataRow(summaryRow, totalCols, true, false, 'FFD3D3D3'); // Darker gray for grand total
-  }
+    const grandRow = worksheet.getRow(currentRow);
+    grandRow.getCell(3).value = Number(grandTotal.total_mileage) || 0;
 
-  setColumnWidths(worksheet, totalCols);
+    fuelsForSheet.forEach((fuel, i) => {
+      const gf = (grandTotal.fuels || []).find((f: any) => f.fuel_id === fuel.id);
+      grandRow.getCell(startBalanceCol + i).value = '—';
+      const receivedCol = consumedStartCol + i * 2;
+      grandRow.getCell(receivedCol).value = gf ? Number(gf.total_received_amount) || 0 : 0;
+      grandRow.getCell(receivedCol + 1).value = gf ? Number(gf.total_received_sum) || 0 : 0;
+      grandRow.getCell(endBalanceCol + i).value = '—';
+    });
+
+    const grandReceivedSum = (grandTotal.fuels || []).reduce((acc: number, f: any) => acc + (Number(f.total_received_sum) || 0), 0);
+    grandRow.getCell(totalSumCol).value = grandReceivedSum;
+    grandRow.getCell(holidayStartCol).value = Number(grandTotal.holiday?.km) || 0;
+    grandRow.getCell(holidayStartCol + 1).value = Number(grandTotal.holiday?.amount) || 0;
+    grandRow.getCell(holidayStartCol + 2).value = Number(grandTotal.holiday?.sum) || 0;
+
+    for (let c = 3; c <= totalCols; c++) {
+      styleDataCell(grandRow.getCell(c), { bold: true, fill: GRAND_FILL, align: 'right' });
+    }
+    grandRow.height = 22;
+
+    setColumnWidths(worksheet, totalCols);
+    applyA4LandscapeSetup(worksheet);
+  });
 
   const buffer = await workbook.xlsx.writeBuffer();
   return Buffer.from(buffer);
