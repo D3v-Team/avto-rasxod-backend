@@ -22,18 +22,10 @@ export async function generateOrganizationReportWorkbook(
   const monthName = CYRILLIC_MONTHS[month] || `${month}-ой`;
   const groups: any[] = Array.isArray(reportData.groups) ? reportData.groups : [];
 
-  // Barcha yoqilg'i turlarini (dinamik) yig'ish
-  const fuelMap = new Map<string, FuelRef>();
-  groups.forEach((group) => {
-    (group.cars || []).forEach((carItem: any) => {
-      (carItem.fuels || []).forEach((f: any) => {
-        if (!fuelMap.has(f.fuel_id)) {
-          fuelMap.set(f.fuel_id, { id: f.fuel_id, name: f.fuel_name, unit: f.fuel_unit });
-        }
-      });
-    });
-  });
-  const allFuels = Array.from(fuelMap.values());
+  // Barcha yoqilg'i turlari (DB dan to'g'ridan-to'g'ri barcha mavjud yoqilg'ilar olinadi)
+  const allFuels: FuelRef[] = Array.isArray(reportData.all_fuels) 
+    ? reportData.all_fuels 
+    : [];
 
   // Yoqilg'i turlarini MAX_FUELS_PER_SHEET bo'yicha bo'laklarga bo'lish —
   // har bir bo'lak ALOHIDA sheet'da chiqadi, A4 kengligiga sig'ishi uchun
