@@ -1,38 +1,75 @@
 import * as ExcelJS from 'exceljs';
 
 export const CYRILLIC_MONTHS: Record<number, string> = {
-  1: 'Январь', 2: 'Феврал', 3: 'Март', 4: 'Апрель',
-  5: 'Май', 6: 'Июнь', 7: 'Июль', 8: 'Август',
-  9: 'Сентябр', 10: 'Октябр', 11: 'Ноябр', 12: 'Декабр',
+  1: 'Январь', 2: 'Феврал', 3: 'Март', 4: 'Апрель', 5: 'Май', 6: 'Июнь',
+  7: 'Июль', 8: 'Август', 9: 'Сентябр', 10: 'Октябр', 11: 'Ноябр', 12: 'Декабр',
 };
 
-export function setupPageSettings(worksheet: ExcelJS.Worksheet) {
-  worksheet.pageSetup = {
-    orientation: 'landscape',
-    paperSize: 9, // A4
-    fitToPage: true,
-    fitToWidth: 1,
-    fitToHeight: 0,
-    margins: { left: 0.2, right: 0.2, top: 0.3, bottom: 0.3, header: 0, footer: 0 },
-  };
+export const FONT_NAME = 'Arial';
+
+export const HEADER_FILL: ExcelJS.Fill = {
+  type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9D9D9' },
+};
+export const CAR_TITLE_FILL: ExcelJS.Fill = {
+  type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' },
+};
+export const JAMI_FILL: ExcelJS.Fill = {
+  type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC9C9C9' },
+};
+export const GRAND_FILL: ExcelJS.Fill = {
+  type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFB0B0B0' },
+};
+
+export const THIN_BORDER: Partial<ExcelJS.Borders> = {
+  top: { style: 'thin' },
+  left: { style: 'thin' },
+  bottom: { style: 'thin' },
+  right: { style: 'thin' },
+};
+
+// Bitta A4 landscape sahifaga (chekka + shrift bilan) qulay sig'adigan
+// yoqilg'i turlari soni. Bundan ko'p bo'lsa, keyingi sheet'ga o'tkaziladi.
+export const MAX_FUELS_PER_SHEET = 3;
+
+export interface FuelRef {
+  id: string;
+  name: string;
+  unit: string;
 }
 
+// Ustunlar: 1:№ 2:Масъуллар 3:Юрилган км
+// 4..(4+3F-1): Ой бошига қолдиқ (har fuel uchun 1 ustun)
+// keyin: Ой давомида сарфланган (har fuel uchun 2 ustun: миqdor+сумма) + Умумий суммаси (1 ustun)
+// keyin: Ой охирига қолдиқ (har fuel uchun 1 ustun)
+// keyin: Дам олиш кунлари (3 ustun: км, миqdor, сумма)
 export function buildHeaderRows(
   worksheet: ExcelJS.Worksheet,
   year: number,
-  monthName: string
-): { totalCols: number } {
-  const totalCols = 19;
+  monthName: string,
+  fuels: FuelRef[],
+): {
+  totalCols: number;
+  startBalanceCol: number;
+  consumedStartCol: number;
+  totalSumCol: number;
+  endBalanceCol: number;
+  holidayStartCol: number;
+} {
+  const fuelCount = fuels.length;
+  const startBalanceCol = 4;
+  const consumedStartCol = startBalanceCol + fuelCount;
+  const totalSumCol = consumedStartCol + fuelCount * 2;
+  const endBalanceCol = totalSumCol + 1;
+  const holidayStartCol = endBalanceCol + fuelCount;
+  const totalCols = holidayStartCol + 2;
 
-  // 1-qator: Sarlavha
   worksheet.mergeCells(1, 1, 1, totalCols);
   const titleCell = worksheet.getCell(1, 1);
-  titleCell.value = `ЎҚУФ Сирдарё вилоят кенгаши балансидаги автотранспорт воситалари томонидан ${year} йил ${monthName} ойида сарфланган ёқилғи харажатлари бўйича\nҲисобот`;
-  titleCell.font = { name: 'Arial', size: 10, bold: true };
+  titleCell.value = `ЎКУФ Сирдарё вилоят кенгаши балансидаги автотранспорт воситалари томонидан ${year} йил ${monthName} ойида сарфланган ёқилғи харажатлари бўйича Хисобот`;
+  titleCell.font = { name: FONT_NAME, size: 10, bold: true };
   titleCell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-  worksheet.getRow(1).height = 35;
+  worksheet.getRow(1).height = 26;
 
-  // 2 va 3-qator: Ustunlar sarlavhasi (Rasmdagidek)
   worksheet.mergeCells(2, 1, 3, 1);
   worksheet.getCell(2, 1).value = '№';
 
@@ -40,63 +77,104 @@ export function buildHeaderRows(
   worksheet.getCell(2, 2).value = 'Бириктирилган масъуллар';
 
   worksheet.mergeCells(2, 3, 3, 3);
-  worksheet.getCell(2, 3).value = 'Юрилган\nмасофа км';
+  worksheet.getCell(2, 3).value = 'Юрилган масофа км';
 
   // Ой бошига қолдиқ
-  worksheet.mergeCells(2, 4, 2, 6);
-  worksheet.getCell(2, 4).value = 'Ой бошига қолдиқ';
-  worksheet.getCell(3, 4).value = 'Бензин\nлитр';
-  worksheet.getCell(3, 5).value = 'газ м3';
-  worksheet.getCell(3, 6).value = 'Пропан\nлитр';
+  worksheet.mergeCells(2, startBalanceCol, 2, startBalanceCol + fuelCount - 1);
+  worksheet.getCell(2, startBalanceCol).value = 'Ой бошига қолдиқ';
+  fuels.forEach((fuel, i) => {
+    worksheet.getCell(3, startBalanceCol + i).value = `${fuel.name} ${fuel.unit}`;
+  });
 
-  // Ой давомида сарфланган
-  worksheet.mergeCells(2, 7, 2, 13);
-  worksheet.getCell(2, 7).value = 'Ой давомида сарфланган';
-  worksheet.getCell(3, 7).value = 'Бензин\nлитр';
-  worksheet.getCell(3, 8).value = 'суммаси';
-  worksheet.getCell(3, 9).value = 'газ м3';
-  worksheet.getCell(3, 10).value = 'суммаси';
-  worksheet.getCell(3, 11).value = 'Пропан\nлитр';
-  worksheet.getCell(3, 12).value = 'суммаси';
-  worksheet.getCell(3, 13).value = 'Умумий\nсуммаси';
+  // Ой давомида сарфланган (har fuel: миqdor + сумма)
+  worksheet.mergeCells(2, consumedStartCol, 2, consumedStartCol + fuelCount * 2 - 1);
+  worksheet.getCell(2, consumedStartCol).value = 'Ой давомида сарфланган';
+  fuels.forEach((fuel, i) => {
+    const col = consumedStartCol + i * 2;
+    worksheet.getCell(3, col).value = `${fuel.name} ${fuel.unit}`;
+    worksheet.getCell(3, col + 1).value = 'суммаси';
+  });
+
+  // Умумий суммаси
+  worksheet.mergeCells(2, totalSumCol, 3, totalSumCol);
+  worksheet.getCell(2, totalSumCol).value = 'Умумий суммаси';
 
   // Ой охирига қолдиқ
-  worksheet.mergeCells(2, 14, 2, 16);
-  worksheet.getCell(2, 14).value = 'Ой охирига қолдиқ';
-  worksheet.getCell(3, 14).value = 'Бензин\nлитр';
-  worksheet.getCell(3, 15).value = 'газ м3';
-  worksheet.getCell(3, 16).value = 'Пропан\nлитр';
+  worksheet.mergeCells(2, endBalanceCol, 2, endBalanceCol + fuelCount - 1);
+  worksheet.getCell(2, endBalanceCol).value = 'Ой охирига қолдиқ';
+  fuels.forEach((fuel, i) => {
+    worksheet.getCell(3, endBalanceCol + i).value = `${fuel.name} ${fuel.unit}`;
+  });
 
-  // Дам олиш кунлари ва байрам саналарида
-  worksheet.mergeCells(2, 17, 2, 19);
-  worksheet.getCell(2, 17).value = 'Дам олиш кунлари ва\nбайрам саналарида';
-  worksheet.getCell(3, 17).value = 'км';
-  worksheet.getCell(3, 18).value = 'Литр/\nм3';
-  worksheet.getCell(3, 19).value = 'Суммаси';
+  // Дам олиш кунлари
+  worksheet.mergeCells(2, holidayStartCol, 2, holidayStartCol + 2);
+  worksheet.getCell(2, holidayStartCol).value = 'Дам олиш кунлари ва байрам саналарида';
+  worksheet.getCell(3, holidayStartCol).value = 'км';
+  worksheet.getCell(3, holidayStartCol + 1).value = 'миқдор';
+  worksheet.getCell(3, holidayStartCol + 2).value = 'суммаси';
 
   [2, 3].forEach((rowNum) => {
     const row = worksheet.getRow(rowNum);
-    row.height = rowNum === 2 ? 18 : 26;
+    row.height = rowNum === 2 ? 26 : 20;
     row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
       if (colNumber <= totalCols) {
-        cell.font = { name: 'Arial', size: 7.5, bold: true };
+        cell.font = { name: FONT_NAME, size: 7, bold: true };
         cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' } };
-        cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+        cell.fill = HEADER_FILL;
+        cell.border = THIN_BORDER;
       }
     });
   });
 
-  setColumnWidths(worksheet, totalCols);
-  return { totalCols };
+  return { totalCols, startBalanceCol, consumedStartCol, totalSumCol, endBalanceCol, holidayStartCol };
 }
 
-export function setColumnWidths(worksheet: ExcelJS.Worksheet, totalCols: number = 19) {
-  const widths = [3.5, 26, 7.5, 5.5, 5.5, 5.5, 5.5, 9, 5.5, 9, 5.5, 9, 10.5, 5.5, 5.5, 5.5, 4.5, 4.5, 6.5];
-  for (let c = 1; c <= totalCols; c++) {
-    worksheet.getColumn(c).width = widths[c - 1] || 8;
+export function styleDataCell(
+  cell: ExcelJS.Cell,
+  opts: { bold?: boolean; fill?: ExcelJS.Fill; align?: 'left' | 'center' | 'right' } = {},
+) {
+  cell.border = THIN_BORDER;
+  cell.font = { name: FONT_NAME, size: 7.5, bold: !!opts.bold };
+  cell.alignment = {
+    vertical: 'middle',
+    horizontal: opts.align || 'right',
+    wrapText: true,
+  };
+  if (opts.fill) cell.fill = opts.fill;
+  if (typeof cell.value === 'number') {
+    cell.numFmt = '#,##0';
   }
 }
+
+// A4 landscape'ga to'liq sig'dirish uchun sahifa sozlamalari
+export function applyA4LandscapeSetup(worksheet: ExcelJS.Worksheet) {
+  worksheet.pageSetup.orientation = 'landscape';
+  worksheet.pageSetup.paperSize = 9; // A4
+  worksheet.pageSetup.fitToPage = true;
+  worksheet.pageSetup.fitToWidth = 1;
+  worksheet.pageSetup.fitToHeight = 0;
+  worksheet.pageSetup.horizontalCentered = true;
+  worksheet.pageSetup.margins = {
+    left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2,
+  };
+}
+
+// Ustun kengliklari — 19 ustunli (3 fuel) tarkib A4 landscape'ga sig'adigan
+// taxminiy kengliklar. Fuel soni kamroq bo'lsa ustunlar avtomatik kengroq
+// bo'lib qolishi mumkin, bu muammo emas.
+export function setColumnWidths(
+  worksheet: ExcelJS.Worksheet,
+  totalCols: number,
+) {
+  worksheet.getColumn(1).width = 4;
+  worksheet.getColumn(2).width = 26;
+  worksheet.getColumn(3).width = 9;
+  for (let c = 4; c <= totalCols; c++) {
+    worksheet.getColumn(c).width = 8;
+  }
+}
+
+
 
 export function formatDataRow(
   row: ExcelJS.Row,
@@ -138,13 +216,13 @@ export async function generateOrganizationReportWorkbook(reportData: any): Promi
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet('Хисобот');
 
-  setupPageSettings(worksheet);
+  applyA4LandscapeSetup(worksheet);
 
   const year = reportData.year;
   const month = reportData.month;
   const monthName = CYRILLIC_MONTHS[month] || `${month}-ой`;
 
-  const { totalCols } = buildHeaderRows(worksheet, year, monthName);
+  const { totalCols } = buildHeaderRows(worksheet, year, monthName, reportData.fuels);
   let currentRowIndex = 4;
 
   if (Array.isArray(reportData.groups)) {

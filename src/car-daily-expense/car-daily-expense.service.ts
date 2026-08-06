@@ -1313,6 +1313,8 @@ export class CarDailyExpenseService {
           const fuel = fuelMap.get(fuelId);
           const records = fuelGroup?.get(fuelId) || [];
 
+          let receivedAmount = 0;
+          let receivedSum = 0;
           let consumedAmount = 0;
           let consumedSum = 0;
           let startBalance = 0;
@@ -1320,10 +1322,13 @@ export class CarDailyExpenseService {
 
           if (records.length > 0) {
             records.forEach((r) => {
+              const rReceived = Number(r.received_amount) || 0;
               const rAmount = Number(r.fuel_expence) || 0;
               // ✅ Har bir yozuvning saqlangan fuel_price_at_time narxi bo'yicha ko'paytiriladi
               const rPrice = Number(r.fuel_price_at_time) || fuel?.price || 0;
               carTotalMileage += Number(r.mileage) || 0;
+              receivedAmount += rReceived;
+              receivedSum += rReceived * rPrice;
               consumedAmount += rAmount;
               consumedSum += rAmount * rPrice;
             });
@@ -1350,6 +1355,8 @@ export class CarDailyExpenseService {
             fuel_name: fuel?.name || '',
             fuel_unit: fuel?.unit || '',
             start_balance: startBalance,
+            received_amount: receivedAmount,
+            received_sum: receivedSum,
             consumed_amount: consumedAmount,
             consumed_sum: consumedSum,
             end_balance: endBalance,
@@ -1392,7 +1399,7 @@ export class CarDailyExpenseService {
     let grandTotalSum = 0;
     const grandTotalFuelsMap = new Map<
       string,
-      { amount: number; sum: number }
+      { received_amount: number; received_sum: number; amount: number; sum: number }
     >();
     const grandTotalHoliday = { km: 0, amount: 0, sum: 0 };
 
@@ -1414,6 +1421,13 @@ export class CarDailyExpenseService {
             },
             attributes: [
               'fuel_id',
+              [fn('SUM', col('received_amount')), 'total_received_amount'],
+              [
+                literal(
+                  'SUM(COALESCE("received_amount", 0) * COALESCE("fuel_price_at_time", 0))',
+                ),
+                'total_received_sum',
+              ],
               [fn('SUM', col('fuel_expence')), 'total_consumed_amount'],
               [
                 literal(
@@ -1450,9 +1464,11 @@ export class CarDailyExpenseService {
       grandTotalMileage = Number((grandTotalAgg[0] as any)?.total_mileage) || 0;
 
       (grandTotalFuelsAgg as any[]).forEach((row) => {
+        const received_amount = Number(row.total_received_amount) || 0;
+        const received_sum = Number(row.total_received_sum) || 0;
         const amount = Number(row.total_consumed_amount) || 0;
         const sum = Number(row.total_consumed_sum) || 0;
-        grandTotalFuelsMap.set(row.fuel_id, { amount, sum });
+        grandTotalFuelsMap.set(row.fuel_id, { received_amount, received_sum, amount, sum });
         grandTotalSum += sum;
       });
 
@@ -1473,6 +1489,8 @@ export class CarDailyExpenseService {
           fuel_id: fuelId,
           fuel_name: fuel?.name || '',
           fuel_unit: fuel?.unit || '',
+          total_received_amount: val.received_amount,
+          total_received_sum: val.received_sum,
           total_consumed_amount: val.amount,
           total_consumed_sum: val.sum,
         };
@@ -1536,11 +1554,15 @@ export class CarDailyExpenseService {
               fuel_id: f.fuel_id,
               fuel_name: f.fuel_name,
               fuel_unit: f.fuel_unit,
+              total_received_amount: 0,
+              total_received_sum: 0,
               total_consumed_amount: 0,
               total_consumed_sum: 0,
             });
           }
           const gf = group.group_total.fuelsMap.get(f.fuel_id);
+          gf.total_received_amount += (Number(f.received_amount) || 0);
+          gf.total_received_sum += (Number(f.received_sum) || 0);
           gf.total_consumed_amount += (Number(f.consumed_amount) || 0);
           gf.total_consumed_sum += (Number(f.consumed_sum) || 0);
         });
