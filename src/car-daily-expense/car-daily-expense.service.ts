@@ -1513,6 +1513,7 @@ export class CarDailyExpenseService {
         total_sum: grandTotalSum,
         holiday: grandTotalHoliday,
       },
+      all_fuels: fuelsList.map(f => ({ id: f.id, name: f.name, unit: f.unit })),
     };
   }
 
@@ -1611,6 +1612,7 @@ export class CarDailyExpenseService {
         totalPages: flatDataResult.totalPages,
         groups, // data o'rniga groups qaytariladi
         grand_total: flatDataResult.grand_total,
+        all_fuels: flatDataResult.all_fuels,
       };
     } catch (error) {
       if (error instanceof HttpException) {
@@ -1638,6 +1640,7 @@ export class CarDailyExpenseService {
         month: flatDataResult.month,
         groups,
         grand_total: flatDataResult.grand_total,
+        all_fuels: flatDataResult.all_fuels,
       };
 
       return await generateOrganizationReportWorkbook(reportData);
