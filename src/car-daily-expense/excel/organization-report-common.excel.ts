@@ -212,168 +212,168 @@ export function formatDataRow(
   }
 }
 
-export async function generateOrganizationReportWorkbook(reportData: any): Promise<Buffer> {
-  const workbook = new ExcelJS.Workbook();
-  const worksheet = workbook.addWorksheet('Хисобот');
+// export async function generateOrganizationReportWorkbook(reportData: any): Promise<Buffer> {
+//   const workbook = new ExcelJS.Workbook();
+//   const worksheet = workbook.addWorksheet('Хисобот');
 
-  applyA4LandscapeSetup(worksheet);
+//   applyA4LandscapeSetup(worksheet);
 
-  const year = reportData.year;
-  const month = reportData.month;
-  const monthName = CYRILLIC_MONTHS[month] || `${month}-ой`;
+//   const year = reportData.year;
+//   const month = reportData.month;
+//   const monthName = CYRILLIC_MONTHS[month] || `${month}-ой`;
 
-  const { totalCols } = buildHeaderRows(worksheet, year, monthName, reportData.fuels);
-  let currentRowIndex = 4;
+//   const { totalCols } = buildHeaderRows(worksheet, year, monthName, reportData.fuels);
+//   let currentRowIndex = 4;
 
-  if (Array.isArray(reportData.groups)) {
-    reportData.groups.forEach((group: any, groupIdx: number) => {
+//   if (Array.isArray(reportData.groups)) {
+//     reportData.groups.forEach((group: any, groupIdx: number) => {
 
-      if (Array.isArray(group.cars)) {
-        group.cars.forEach((carItem: any, carIdx: number) => {
+//       if (Array.isArray(group.cars)) {
+//         group.cars.forEach((carItem: any, carIdx: number) => {
 
-          // 1. Mashina modeli va raqami (Alohida guruh sarlavhasi qatori)
-          const carHeaderRow = worksheet.getRow(currentRowIndex);
-          const carName = carItem.car?.name || '';
-          const plateNumber = carItem.car?.plate_number || '';
+//           // 1. Mashina modeli va raqami (Alohida guruh sarlavhasi qatori)
+//           const carHeaderRow = worksheet.getRow(currentRowIndex);
+//           const carName = carItem.car?.name || '';
+//           const plateNumber = carItem.car?.plate_number || '';
 
-          worksheet.mergeCells(currentRowIndex, 1, currentRowIndex, totalCols);
-          carHeaderRow.getCell(1).value = `${carName.toUpperCase()} - ${plateNumber.toUpperCase()}`;
-          formatDataRow(carHeaderRow, totalCols, false, true, 'FFFAFAFA');
-          currentRowIndex++;
+//           worksheet.mergeCells(currentRowIndex, 1, currentRowIndex, totalCols);
+//           carHeaderRow.getCell(1).value = `${carName.toUpperCase()} - ${plateNumber.toUpperCase()}`;
+//           formatDataRow(carHeaderRow, totalCols, false, true, 'FFFAFAFA');
+//           currentRowIndex++;
 
-          // 2. Avto ma'lumotlari haqiqiy qatori
-          const row = worksheet.getRow(currentRowIndex);
+//           // 2. Avto ma'lumotlari haqiqiy qatori
+//           const row = worksheet.getRow(currentRowIndex);
 
-          const benzin = carItem.fuels?.find((f: any) => f.fuel_name?.toLowerCase().includes('benzin') || f.fuel_id === 'benzin');
-          const gaz = carItem.fuels?.find((f: any) => f.fuel_name?.toLowerCase().includes('gaz') || f.fuel_id === 'gaz');
-          const propan = carItem.fuels?.find((f: any) => f.fuel_name?.toLowerCase().includes('propan') || f.fuel_id === 'propan');
+//           const benzin = carItem.fuels?.find((f: any) => f.fuel_name?.toLowerCase().includes('benzin') || f.fuel_id === 'benzin');
+//           const gaz = carItem.fuels?.find((f: any) => f.fuel_name?.toLowerCase().includes('gaz') || f.fuel_id === 'gaz');
+//           const propan = carItem.fuels?.find((f: any) => f.fuel_name?.toLowerCase().includes('propan') || f.fuel_id === 'propan');
 
-          const respName = carItem.car?.responsible_employee?.full_name || group.responsible_employee?.full_name || '';
-          const respRole = carItem.car?.responsible_employee?.role || group.responsible_employee?.role || 'Масъул';
-          const drvName = carItem.car?.driver?.full_name || '—';
+//           const respName = carItem.car?.responsible_employee?.full_name || group.responsible_employee?.full_name || '';
+//           const respRole = carItem.car?.responsible_employee?.role || group.responsible_employee?.role || 'Масъул';
+//           const drvName = carItem.car?.driver?.full_name || '—';
 
-          // 1-ustun (A): №
-          row.getCell(1).value = groupIdx + 1;
+//           // 1-ustun (A): №
+//           row.getCell(1).value = groupIdx + 1;
 
-          // 2-ustun (B): Mas'ul va Haydovchi ismlari
-          let respStr = respName ? `${respRole}: ${respName}` : '';
-          let drvStr = drvName !== '—' ? `Ҳайдовчи: ${drvName}` : '';
-          row.getCell(2).value = [respStr, drvStr].filter(Boolean).join('\n') || '—';
+//           // 2-ustun (B): Mas'ul va Haydovchi ismlari
+//           let respStr = respName ? `${respRole}: ${respName}` : '';
+//           let drvStr = drvName !== '—' ? `Ҳайдовчи: ${drvName}` : '';
+//           row.getCell(2).value = [respStr, drvStr].filter(Boolean).join('\n') || '—';
 
-          // 3-ustun (C): Юрилган масофа км
-          row.getCell(3).value = Number(carItem.total_mileage) || 0;
+//           // 3-ustun (C): Юрилган масофа км
+//           row.getCell(3).value = Number(carItem.total_mileage) || 0;
 
-          // 4-6 ustunlar (D, E, F): Ой бошига қолдиқ (Benzin, Gaz, Propan)
-          row.getCell(4).value = Number(benzin?.start_balance) || 0;
-          row.getCell(5).value = Number(gaz?.start_balance) || 0;
-          row.getCell(6).value = Number(propan?.start_balance) || 0;
+//           // 4-6 ustunlar (D, E, F): Ой бошига қолдиқ (Benzin, Gaz, Propan)
+//           row.getCell(4).value = Number(benzin?.start_balance) || 0;
+//           row.getCell(5).value = Number(gaz?.start_balance) || 0;
+//           row.getCell(6).value = Number(propan?.start_balance) || 0;
 
-          // 7-12 ustunlar (G, H, I, J, K, L): Ой давомида сарфланган (olingan yoqilg'i jami hajmi va summasi)
-          row.getCell(7).value = Number(benzin?.consumed_amount) || 0;
-          row.getCell(8).value = Number(benzin?.consumed_sum) || 0;
-          row.getCell(9).value = Number(gaz?.consumed_amount) || 0;
-          row.getCell(10).value = Number(gaz?.consumed_sum) || 0;
-          row.getCell(11).value = Number(propan?.consumed_amount) || 0;
-          row.getCell(12).value = Number(propan?.consumed_sum) || 0;
+//           // 7-12 ustunlar (G, H, I, J, K, L): Ой давомида сарфланган (olingan yoqilg'i jami hajmi va summasi)
+//           row.getCell(7).value = Number(benzin?.consumed_amount) || 0;
+//           row.getCell(8).value = Number(benzin?.consumed_sum) || 0;
+//           row.getCell(9).value = Number(gaz?.consumed_amount) || 0;
+//           row.getCell(10).value = Number(gaz?.consumed_sum) || 0;
+//           row.getCell(11).value = Number(propan?.consumed_amount) || 0;
+//           row.getCell(12).value = Number(propan?.consumed_sum) || 0;
 
-          // 13-ustun (M): Умумий суммаси (Benzin summasi [H] + Gaz summasi [J] + Propan summasi [L])
-          // Dynamic ravishda joriy qator formulasini beramiz: H + J + L
-          row.getCell(13).value = { formula: `H${currentRowIndex}+J${currentRowIndex}+L${currentRowIndex}` };
+//           // 13-ustun (M): Умумий суммаси (Benzin summasi [H] + Gaz summasi [J] + Propan summasi [L])
+//           // Dynamic ravishda joriy qator formulasini beramiz: H + J + L
+//           row.getCell(13).value = { formula: `H${currentRowIndex}+J${currentRowIndex}+L${currentRowIndex}` };
 
-          // 14-16 ustunlar (N, O, P): Ой охирига қолдиқ
-          row.getCell(14).value = Number(benzin?.end_balance) || 0;
-          row.getCell(15).value = Number(gaz?.end_balance) || 0;
-          row.getCell(16).value = Number(propan?.end_balance) || 0;
+//           // 14-16 ustunlar (N, O, P): Ой охирига қолдиқ
+//           row.getCell(14).value = Number(benzin?.end_balance) || 0;
+//           row.getCell(15).value = Number(gaz?.end_balance) || 0;
+//           row.getCell(16).value = Number(propan?.end_balance) || 0;
 
-          // 17-19 ustunlar (Q, R, S): Дам олиш кунлари
-          row.getCell(17).value = Number(carItem.holiday?.km) || 0;
-          row.getCell(18).value = Number(carItem.holiday?.amount) || 0;
-          row.getCell(19).value = Number(carItem.holiday?.sum) || 0;
+//           // 17-19 ustunlar (Q, R, S): Дам олиш кунлари
+//           row.getCell(17).value = Number(carItem.holiday?.km) || 0;
+//           row.getCell(18).value = Number(carItem.holiday?.amount) || 0;
+//           row.getCell(19).value = Number(carItem.holiday?.sum) || 0;
 
-          formatDataRow(row, totalCols, false, false);
-          currentRowIndex++;
-        });
-      }
+//           formatDataRow(row, totalCols, false, false);
+//           currentRowIndex++;
+//         });
+//       }
 
-      // 3. GURUH BO'YICHA JAMI (Жами qatori)
-      const groupTotal = group.group_total;
-      if (groupTotal) {
-        const groupTotalRow = worksheet.getRow(currentRowIndex);
+//       // 3. GURUH BO'YICHA JAMI (Жами qatori)
+//       const groupTotal = group.group_total;
+//       if (groupTotal) {
+//         const groupTotalRow = worksheet.getRow(currentRowIndex);
 
-        groupTotalRow.getCell(2).value = 'Жами';
-        groupTotalRow.getCell(3).value = Number(groupTotal.total_mileage) || 0;
+//         groupTotalRow.getCell(2).value = 'Жами';
+//         groupTotalRow.getCell(3).value = Number(groupTotal.total_mileage) || 0;
 
-        // Qoldiqlar jami "—" bo'ladi
-        groupTotalRow.getCell(4).value = '—';
-        groupTotalRow.getCell(5).value = '—';
-        groupTotalRow.getCell(6).value = '—';
+//         // Qoldiqlar jami "—" bo'ladi
+//         groupTotalRow.getCell(4).value = '—';
+//         groupTotalRow.getCell(5).value = '—';
+//         groupTotalRow.getCell(6).value = '—';
 
-        const gtBenzin = groupTotal.fuels?.find((f: any) => f.fuel_name?.toLowerCase().includes('benzin') || f.fuel_id === 'benzin');
-        const gtGaz = groupTotal.fuels?.find((f: any) => f.fuel_name?.toLowerCase().includes('gaz') || f.fuel_id === 'gaz');
-        const gtPropan = groupTotal.fuels?.find((f: any) => f.fuel_name?.toLowerCase().includes('propan') || f.fuel_id === 'propan');
+//         const gtBenzin = groupTotal.fuels?.find((f: any) => f.fuel_name?.toLowerCase().includes('benzin') || f.fuel_id === 'benzin');
+//         const gtGaz = groupTotal.fuels?.find((f: any) => f.fuel_name?.toLowerCase().includes('gaz') || f.fuel_id === 'gaz');
+//         const gtPropan = groupTotal.fuels?.find((f: any) => f.fuel_name?.toLowerCase().includes('propan') || f.fuel_id === 'propan');
 
-        groupTotalRow.getCell(7).value = Number(gtBenzin?.total_consumed_amount) || 0;
-        groupTotalRow.getCell(8).value = Number(gtBenzin?.total_consumed_sum) || 0;
-        groupTotalRow.getCell(9).value = Number(gtGaz?.total_consumed_amount) || 0;
-        groupTotalRow.getCell(10).value = Number(gtGaz?.total_consumed_sum) || 0;
-        groupTotalRow.getCell(11).value = Number(gtPropan?.total_consumed_amount) || 0;
-        groupTotalRow.getCell(12).value = Number(gtPropan?.total_consumed_sum) || 0;
+//         groupTotalRow.getCell(7).value = Number(gtBenzin?.total_consumed_amount) || 0;
+//         groupTotalRow.getCell(8).value = Number(gtBenzin?.total_consumed_sum) || 0;
+//         groupTotalRow.getCell(9).value = Number(gtGaz?.total_consumed_amount) || 0;
+//         groupTotalRow.getCell(10).value = Number(gtGaz?.total_consumed_sum) || 0;
+//         groupTotalRow.getCell(11).value = Number(gtPropan?.total_consumed_amount) || 0;
+//         groupTotalRow.getCell(12).value = Number(gtPropan?.total_consumed_sum) || 0;
         
-        // Guruh umumiy summasi formula orqali: H + J + L
-        groupTotalRow.getCell(13).value = { formula: `H${currentRowIndex}+J${currentRowIndex}+L${currentRowIndex}` };
+//         // Guruh umumiy summasi formula orqali: H + J + L
+//         groupTotalRow.getCell(13).value = { formula: `H${currentRowIndex}+J${currentRowIndex}+L${currentRowIndex}` };
 
-        groupTotalRow.getCell(14).value = '—';
-        groupTotalRow.getCell(15).value = '—';
-        groupTotalRow.getCell(16).value = '—';
+//         groupTotalRow.getCell(14).value = '—';
+//         groupTotalRow.getCell(15).value = '—';
+//         groupTotalRow.getCell(16).value = '—';
 
-        groupTotalRow.getCell(17).value = Number(groupTotal.holiday?.km) || 0;
-        groupTotalRow.getCell(18).value = Number(groupTotal.holiday?.amount) || 0;
-        groupTotalRow.getCell(19).value = Number(groupTotal.holiday?.sum) || 0;
+//         groupTotalRow.getCell(17).value = Number(groupTotal.holiday?.km) || 0;
+//         groupTotalRow.getCell(18).value = Number(groupTotal.holiday?.amount) || 0;
+//         groupTotalRow.getCell(19).value = Number(groupTotal.holiday?.sum) || 0;
 
-        formatDataRow(groupTotalRow, totalCols, true, false, 'FFF0F0F0');
-        currentRowIndex++;
-      }
-    });
-  }
+//         formatDataRow(groupTotalRow, totalCols, true, false, 'FFF0F0F0');
+//         currentRowIndex++;
+//       }
+//     });
+//   }
 
-  // 4. GRAND TOTAL (Умумий жами)
-  const grandTotal = reportData.grand_total;
-  if (grandTotal) {
-    const summaryRow = worksheet.getRow(currentRowIndex);
-    summaryRow.getCell(2).value = 'Умумий жами';
-    summaryRow.getCell(3).value = Number(grandTotal.total_mileage) || 0;
+//   // 4. GRAND TOTAL (Умумий жами)
+//   const grandTotal = reportData.grand_total;
+//   if (grandTotal) {
+//     const summaryRow = worksheet.getRow(currentRowIndex);
+//     summaryRow.getCell(2).value = 'Умумий жами';
+//     summaryRow.getCell(3).value = Number(grandTotal.total_mileage) || 0;
 
-    summaryRow.getCell(4).value = '—';
-    summaryRow.getCell(5).value = '—';
-    summaryRow.getCell(6).value = '—';
+//     summaryRow.getCell(4).value = '—';
+//     summaryRow.getCell(5).value = '—';
+//     summaryRow.getCell(6).value = '—';
 
-    const grandBenzin = grandTotal.fuels?.find((f: any) => f.fuel_name?.toLowerCase().includes('benzin') || f.fuel_id === 'benzin');
-    const grandGaz = grandTotal.fuels?.find((f: any) => f.fuel_name?.toLowerCase().includes('gaz') || f.fuel_id === 'gaz');
-    const grandPropan = grandTotal.fuels?.find((f: any) => f.fuel_name?.toLowerCase().includes('propan') || f.fuel_id === 'propan');
+//     const grandBenzin = grandTotal.fuels?.find((f: any) => f.fuel_name?.toLowerCase().includes('benzin') || f.fuel_id === 'benzin');
+//     const grandGaz = grandTotal.fuels?.find((f: any) => f.fuel_name?.toLowerCase().includes('gaz') || f.fuel_id === 'gaz');
+//     const grandPropan = grandTotal.fuels?.find((f: any) => f.fuel_name?.toLowerCase().includes('propan') || f.fuel_id === 'propan');
 
-    summaryRow.getCell(7).value = Number(grandBenzin?.total_consumed_amount) || 0;
-    summaryRow.getCell(8).value = Number(grandBenzin?.total_consumed_sum) || 0;
-    summaryRow.getCell(9).value = Number(grandGaz?.total_consumed_amount) || 0;
-    summaryRow.getCell(10).value = Number(grandGaz?.total_consumed_sum) || 0;
-    summaryRow.getCell(11).value = Number(grandPropan?.total_consumed_amount) || 0;
-    summaryRow.getCell(12).value = Number(grandPropan?.total_consumed_sum) || 0;
+//     summaryRow.getCell(7).value = Number(grandBenzin?.total_consumed_amount) || 0;
+//     summaryRow.getCell(8).value = Number(grandBenzin?.total_consumed_sum) || 0;
+//     summaryRow.getCell(9).value = Number(grandGaz?.total_consumed_amount) || 0;
+//     summaryRow.getCell(10).value = Number(grandGaz?.total_consumed_sum) || 0;
+//     summaryRow.getCell(11).value = Number(grandPropan?.total_consumed_amount) || 0;
+//     summaryRow.getCell(12).value = Number(grandPropan?.total_consumed_sum) || 0;
     
-    // Umumiy jami summasi ham formula orqali: H + J + L
-    summaryRow.getCell(13).value = { formula: `H${currentRowIndex}+J${currentRowIndex}+L${currentRowIndex}` };
+//     // Umumiy jami summasi ham formula orqali: H + J + L
+//     summaryRow.getCell(13).value = { formula: `H${currentRowIndex}+J${currentRowIndex}+L${currentRowIndex}` };
 
-    summaryRow.getCell(14).value = '—';
-    summaryRow.getCell(15).value = '—';
-    summaryRow.getCell(16).value = '—';
+//     summaryRow.getCell(14).value = '—';
+//     summaryRow.getCell(15).value = '—';
+//     summaryRow.getCell(16).value = '—';
 
-    summaryRow.getCell(17).value = Number(grandTotal.holiday?.km) || 0;
-    summaryRow.getCell(18).value = Number(grandTotal.holiday?.amount) || 0;
-    summaryRow.getCell(19).value = Number(grandTotal.holiday?.sum) || 0;
+//     summaryRow.getCell(17).value = Number(grandTotal.holiday?.km) || 0;
+//     summaryRow.getCell(18).value = Number(grandTotal.holiday?.amount) || 0;
+//     summaryRow.getCell(19).value = Number(grandTotal.holiday?.sum) || 0;
 
-    formatDataRow(summaryRow, totalCols, true, false, 'FFD3D3D3');
-  }
+//     formatDataRow(summaryRow, totalCols, true, false, 'FFD3D3D3');
+//   }
 
-  setColumnWidths(worksheet, totalCols);
+//   setColumnWidths(worksheet, totalCols);
 
-  const buffer = await workbook.xlsx.writeBuffer();
-  return Buffer.from(buffer);
-}
+//   const buffer = await workbook.xlsx.writeBuffer();
+//   return Buffer.from(buffer);
+// }
