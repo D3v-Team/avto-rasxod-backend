@@ -8,7 +8,7 @@ export class UpdateCarDailyExpenseDto extends PartialType(
 ) {
   @ApiProperty({
     required: false,
-    description: 'Yoqilg\'i turi ID (agar almashtirilmoqchi bo\'lsa)',
+    description: "Yoqilg'i turi ID (agar almashtirilmoqchi bo'lsa)",
   })
   @IsOptional()
   fuel_id?: string;

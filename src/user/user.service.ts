@@ -93,7 +93,8 @@ export class UserService implements OnModuleInit {
 
   async getUserById(id: string) {
     const user = await this.userRepo.findByPk(id, { include: { all: true } });
-    if (!user) throw new NotFoundException(`ID ${id} bo'yicha foydalanuvchi topilmadi`);
+    if (!user)
+      throw new NotFoundException(`ID ${id} bo'yicha foydalanuvchi topilmadi`);
     return user;
   }
 
@@ -159,7 +160,9 @@ export class UserService implements OnModuleInit {
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
       console.error('Restore user error:', error);
-      throw new InternalServerErrorException('Adminni tiklashda xatolik yuz berdi');
+      throw new InternalServerErrorException(
+        'Adminni tiklashda xatolik yuz berdi',
+      );
     }
   }
 

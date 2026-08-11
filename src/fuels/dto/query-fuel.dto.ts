@@ -47,14 +47,15 @@ export class QueryFuelDto {
   @ApiProperty({
     description: 'Saralash ustuni',
     example: 'createdAt',
-    enum: ['name', 'price', 'createdAt'],
+    enum: ['name', 'createdAt'],
     default: 'createdAt',
     required: false,
   })
   @IsOptional()
   @IsString({ message: "Saralash ustuni matn ko'rinishida bo'lishi kerak" })
-  @IsIn(['name', 'price', 'createdAt'], {
-    message: "Saralash ustuni quyidagilardan biri bo'lishi kerak: name, price, createdAt",
+  @IsIn(['name', 'createdAt'], {
+    message:
+      "Saralash ustuni quyidagilardan biri bo'lishi kerak: name, createdAt",
   })
   sortBy?: string = 'createdAt';
 

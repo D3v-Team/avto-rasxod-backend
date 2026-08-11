@@ -13,14 +13,14 @@ import { Sequelize } from 'sequelize';
 import { Car } from './models/cars.models';
 import { Employee } from '../employees/models/employee.model';
 import { CarFuelNorm } from '../car-fuel-norm/models/car-fuel-norm.model';
-import { CarDailyExpense } from '../car-daily-expense/models/car-daily-expense.model';
+import { CarDailyExpense } from '../car-fuel-daily-expense/models/car-fuel-daily-expense.model';
 import { CreateCarDto } from './dto/create-car.dto';
 import { UpdateCarDto } from './dto/update-car.dto';
 import { QueryCarDto } from './dto/query-car.dto';
 import { CorrectInitialSpeedometerDto } from './dto/correct-initial-speedometer.dto';
 import { normalizeName } from '../common/utils/normalize-name.util';
 import { Fuel } from '../fuels/models/fuels.models';
-import { CarDailyExpenseService } from '../car-daily-expense/car-daily-expense.service';
+import { CarDailyExpenseService } from '../car-fuel-daily-expense/car-fuel-daily-expense.service';
 
 @Injectable()
 export class CarService {
@@ -34,7 +34,7 @@ export class CarService {
     @InjectConnection() private readonly sequelize: Sequelize,
     @Inject(forwardRef(() => CarDailyExpenseService))
     private readonly carDailyExpenseService: CarDailyExpenseService,
-  ) { }
+  ) {}
 
   async create(dto: CreateCarDto): Promise<Car> {
     try {
@@ -319,7 +319,7 @@ export class CarService {
         if (normalizedDto.responsible_employee_id) {
           const responsibleEmployee = await this.employeeRepo.findByPk(
             normalizedDto.responsible_employee_id,
-            { transaction: t }
+            { transaction: t },
           );
           if (!responsibleEmployee) {
             throw new NotFoundException("Mas'ul xodim topilmadi");
@@ -329,7 +329,7 @@ export class CarService {
         if (normalizedDto.driver_id) {
           const driverEmployee = await this.employeeRepo.findByPk(
             normalizedDto.driver_id,
-            { transaction: t }
+            { transaction: t },
           );
           if (!driverEmployee) {
             throw new NotFoundException('Haydovchi xodim topilmadi');
@@ -363,7 +363,7 @@ export class CarService {
             },
           ],
         });
-        
+
         return updatedCar!;
       });
     } catch (error) {

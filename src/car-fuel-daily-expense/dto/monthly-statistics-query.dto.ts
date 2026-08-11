@@ -45,6 +45,8 @@ export class MonthlyStatisticsQueryDto {
     required: false,
   })
   @IsOptional()
-  @IsUUID('4', { message: "Mashina ID si to'g'ri UUID formatida bo'lishi kerak" })
+  @IsUUID('4', {
+    message: "Mashina ID si to'g'ri UUID formatida bo'lishi kerak",
+  })
   car_id?: string;
 }

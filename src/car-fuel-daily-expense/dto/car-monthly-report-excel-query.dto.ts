@@ -1,13 +1,22 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsInt, IsNotEmpty, IsOptional, IsUUID, Max, Min } from 'class-validator';
+import {
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsUUID,
+  Max,
+  Min,
+} from 'class-validator';
 
 export class CarMonthlyReportExcelQueryDto {
   @ApiProperty({
     description: 'Mashina ID kaliti',
     example: 'uuid',
   })
-  @IsUUID('4', { message: "Mashina ID si to'g'ri UUID formatida bo'lishi kerak" })
+  @IsUUID('4', {
+    message: "Mashina ID si to'g'ri UUID formatida bo'lishi kerak",
+  })
   @IsNotEmpty({ message: 'Mashina ID si kiritilishi shart' })
   car_id: string;
 
@@ -15,7 +24,9 @@ export class CarMonthlyReportExcelQueryDto {
     description: "Yoqilg'i turi ID kaliti",
     example: 'uuid',
   })
-  @IsUUID('4', { message: "Yoqilg'i turi ID si to'g'ri UUID formatida bo'lishi kerak" })
+  @IsUUID('4', {
+    message: "Yoqilg'i turi ID si to'g'ri UUID formatida bo'lishi kerak",
+  })
   @IsOptional()
   fuel_id?: string;
 

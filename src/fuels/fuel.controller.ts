@@ -54,7 +54,7 @@ export class FuelController {
   @ApiQuery({
     name: 'sortBy',
     required: false,
-    enum: ['name', 'price', 'createdAt'],
+    enum: ['name', 'createdAt'],
   })
   @ApiQuery({ name: 'sortOrder', required: false, enum: ['ASC', 'DESC'] })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)

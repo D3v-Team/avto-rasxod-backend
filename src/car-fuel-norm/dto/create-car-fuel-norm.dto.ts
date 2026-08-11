@@ -13,7 +13,9 @@ export class CreateCarFuelNormDto {
     description: 'Mashina ID kaliti',
     example: 'uuid',
   })
-  @IsUUID('4', { message: "Mashina ID si to'g'ri UUID formatida bo'lishi kerak" })
+  @IsUUID('4', {
+    message: "Mashina ID si to'g'ri UUID formatida bo'lishi kerak",
+  })
   @IsNotEmpty({ message: 'Mashina ID si kiritilishi shart' })
   car_id: string;
 
@@ -21,7 +23,9 @@ export class CreateCarFuelNormDto {
     description: "Yoqilg'i turi ID kaliti",
     example: 'uuid',
   })
-  @IsUUID('4', { message: "Yoqilg'i turi ID si to'g'ri UUID formatida bo'lishi kerak" })
+  @IsUUID('4', {
+    message: "Yoqilg'i turi ID si to'g'ri UUID formatida bo'lishi kerak",
+  })
   @IsNotEmpty({ message: "Yoqilg'i turi ID si kiritilishi shart" })
   fuel_id: string;
 
@@ -44,7 +48,14 @@ export class CreateCarFuelNormDto {
   current_balance?: number;
 
   @IsOptional()
-  @IsDateString({}, { message: "Amal qilish sanasi to'g'ri formatda bo'lishi kerak" })
-  @ApiProperty({ required: false, description: "Norma qaysi sanadan boshlab amal qiladi (berilmasa, bugungi sana ishlatiladi)" })
+  @IsDateString(
+    {},
+    { message: "Amal qilish sanasi to'g'ri formatda bo'lishi kerak" },
+  )
+  @ApiProperty({
+    required: false,
+    description:
+      'Norma qaysi sanadan boshlab amal qiladi (berilmasa, bugungi sana ishlatiladi)',
+  })
   effective_from?: string;
 }

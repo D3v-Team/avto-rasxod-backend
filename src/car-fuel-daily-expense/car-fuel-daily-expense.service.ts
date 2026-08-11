@@ -8,9 +8,18 @@ import {
   HttpException,
 } from '@nestjs/common';
 import { InjectModel, InjectConnection } from '@nestjs/sequelize';
-import { IncludeOptions, Op, WhereOptions, fn, col, literal, Transaction, QueryTypes } from 'sequelize';
+import {
+  IncludeOptions,
+  Op,
+  WhereOptions,
+  fn,
+  col,
+  literal,
+  Transaction,
+  QueryTypes,
+} from 'sequelize';
 import { Sequelize } from 'sequelize';
-import { CarDailyExpense } from './models/car-daily-expense.model';
+import { CarDailyExpense } from './models/car-fuel-daily-expense.model';
 import { CarFuelNorm } from '../car-fuel-norm/models/car-fuel-norm.model';
 import { CreateCarDailyExpenseDto } from './dto/create-car-daily-expense.dto';
 import { UpdateCarDailyExpenseDto } from './dto/update-car-daily-expense.dto';
@@ -29,7 +38,6 @@ import { Employee } from '../employees/models/employee.model';
 import { CarFuelNormHistoryService } from '../car-fuel-norm-history/car-fuel-norm-history.service';
 import { normalizeName } from '../common/utils/normalize-name.util';
 
-
 // DIQQAT: CarDailyExpense modulida note (izoh) maydoni erkin matn bo'lgani sababli,
 // uni majburan UPPERCASE qilish noqulaylik tug'diradi. Shu sababli note maydoniga
 // normalizeName() QO'LLANILMAYDI (faqat GET search parametrida normalizeName ishlatiladi).
@@ -46,7 +54,7 @@ export class CarDailyExpenseService {
     private readonly carFuelNormRepo: typeof CarFuelNorm,
     private readonly carFuelNormHistoryService: CarFuelNormHistoryService,
     @InjectConnection() private readonly sequelize: Sequelize,
-  ) { }
+  ) {}
 
   async create(dto: CreateCarDailyExpenseDto): Promise<CarDailyExpense> {
     try {
@@ -94,42 +102,43 @@ export class CarDailyExpenseService {
         const mileage = dto.mileage;
         const received_amount = dto.received_amount || 0;
 
-        // if (mileage === 0 && received_amount === 0) {
-        //   throw new BadRequestException(
-        //     "Kamida bittasi kiritilishi shart: yoqilg'i quyilgan miqdori yoki bosib o'tilgan masofa. Ikkalasi ham 0 bo'lgan yozuv yaratib bo'lmaydi",
-        //   );
-        // }
-
-        const historicalPrice = await this.carFuelNormHistoryService.getPriceForDate(
-          carFuelNorm.id,
-          dto.date,
-          t,
-        );
-        const fuel_price_at_time = historicalPrice ?? fuel.price;
+        if (
+          received_amount > 0 &&
+          (!dto.fuel_price_at_time || dto.fuel_price_at_time <= 0)
+        ) {
+          throw new BadRequestException(
+            "Yoqilg'i quyilgan bo'lsa, uning narxi ham kiritilishi shart",
+          );
+        }
+        if (received_amount === 0 && dto.fuel_price_at_time) {
+          throw new BadRequestException(
+            "Yoqilg'i quyilmagan holatda narx kiritilmasligi kerak",
+          );
+        }
 
         const expense = await this.expenseRepo.create(
           {
             car_id: dto.car_id,
             fuel_id: dto.fuel_id,
             date: dto.date,
-            sequence_no: 0, // recalculateCarChain tomonidan yangilanadi
-            odometer_start: 0, // recalculateCarChain tomonidan yangilanadi
-            odometer_end: 0, // recalculateCarChain tomonidan yangilanadi
+            sequence_no: 0,
+            odometer_start: 0,
+            odometer_end: 0,
             mileage,
             received_amount,
-            fuel_expence: 0, // recalculateCarChain tomonidan yangilanadi
-            fuel_price_at_time,
-            balance_after: 0, // recalculateCarChain tomonidan yangilanadi
+            fuel_expence: 0,
+            fuel_price_at_time: dto.fuel_price_at_time || 0,
+            balance_after: 0,
             is_holiday: dto.is_holiday ?? false,
             note: dto.note,
-            responsible_employee_id_at_time: car.responsible_employee_id ?? null,
+            responsible_employee_id_at_time:
+              car.responsible_employee_id ?? null,
             driver_id_at_time: car.driver_id ?? null,
-            norm_per_100km_at_time: 0, // recalculateCarChain tomonidan yangilanadi
+            norm_per_100km_at_time: 0,
           },
           { transaction: t },
         );
 
-        // Yangi yozuv qo'shilgandan keyin butun zanjirni qayta hisoblash
         await this.recalculateCarChain(car.id, t);
 
         return expense.id;
@@ -199,7 +208,7 @@ export class CarDailyExpenseService {
         where.date = { [Op.lte]: date_to };
       }
 
-      if (is_holiday !== undefined) {
+      if (is_holiday !== undefined && is_holiday !== false) {
         where.is_holiday = is_holiday;
       }
 
@@ -271,27 +280,35 @@ export class CarDailyExpenseService {
             },
             ...(search
               ? [
-                {
-                  model: Car,
-                  as: 'car',
-                  attributes: [],
-                  required: true,
-                  where: {
-                    [Op.or]: [
-                      { name: { [Op.iLike]: `%${normalizedSearch}%` } },
-                      { plate_number: { [Op.iLike]: `%${normalizedSearch}%` } },
-                    ],
+                  {
+                    model: Car,
+                    as: 'car',
+                    attributes: [],
+                    required: true,
+                    where: {
+                      [Op.or]: [
+                        { name: { [Op.iLike]: `%${normalizedSearch}%` } },
+                        {
+                          plate_number: { [Op.iLike]: `%${normalizedSearch}%` },
+                        },
+                      ],
+                    },
                   },
-                },
-              ]
+                ]
               : []),
           ],
           attributes: [
             'fuel_id',
             [fn('MAX', col('fuel.name')), 'fuel_name'],
             [fn('MAX', col('fuel.unit')), 'fuel_unit'],
-            [fn('SUM', col('CarDailyExpense.received_amount')), 'total_received_amount'],
-            [fn('SUM', col('CarDailyExpense.fuel_expence')), 'total_fuel_expence'],
+            [
+              fn('SUM', col('CarDailyExpense.received_amount')),
+              'total_received_amount',
+            ],
+            [
+              fn('SUM', col('CarDailyExpense.fuel_expence')),
+              'total_fuel_expence',
+            ],
             [fn('SUM', col('CarDailyExpense.mileage')), 'total_mileage'],
             [
               literal(
@@ -441,23 +458,38 @@ export class CarDailyExpenseService {
         const newMileage = dto.mileage ?? record.mileage;
         const newReceivedAmount = dto.received_amount ?? record.received_amount;
 
-        // if (newMileage === 0 && newReceivedAmount === 0) {
-        //   throw new BadRequestException(
-        //     "Kamida bittasi bo'lishi shart: yoqilg'i quyilgan miqdori yoki bosib o'tilgan masofa. Ikkalasi ham 0 bo'lishi mumkin emas",
-        //   );
-        // }
+        const finalReceivedAmount =
+          dto.received_amount ?? record.received_amount;
+        const finalPrice =
+          dto.fuel_price_at_time !== undefined
+            ? dto.fuel_price_at_time
+            : record.fuel_price_at_time;
 
-        await record.update(
-          {
-            fuel_id: newFuelId,
-            date: newDate,
-            mileage: newMileage,
-            received_amount: newReceivedAmount,
-            is_holiday: dto.is_holiday ?? record.is_holiday,
-            note: dto.note ?? record.note,
-          },
-          { transaction: t },
-        );
+        if (finalReceivedAmount > 0 && (!finalPrice || finalPrice <= 0)) {
+          throw new BadRequestException(
+            "Yoqilg'i quyilgan bo'lsa, uning narxi ham bo'lishi shart",
+          );
+        }
+        if (finalReceivedAmount === 0 && finalPrice) {
+          throw new BadRequestException(
+            "Yoqilg'i quyilmagan holatda narx bo'lishi mumkin emas",
+          );
+        }
+
+        const updateData: any = {
+          fuel_id: newFuelId,
+          date: newDate,
+          mileage: newMileage,
+          received_amount: newReceivedAmount,
+          is_holiday: dto.is_holiday ?? record.is_holiday,
+          note: dto.note ?? record.note,
+        };
+
+        if (dto.fuel_price_at_time !== undefined) {
+          updateData.fuel_price_at_time = dto.fuel_price_at_time;
+        }
+
+        await record.update(updateData, { transaction: t });
 
         await this.recalculateCarChain(record.car_id, t);
 
@@ -656,15 +688,12 @@ export class CarDailyExpenseService {
         0,
       ).getDate();
 
-
       const today = new Date();
       const isCurrentMonth =
         parseInt(year) === today.getFullYear() &&
         parseInt(monthNum) === today.getMonth() + 1;
 
-      const daysInMonth = isCurrentMonth
-        ? today.getDate()
-        : totalDaysInMonth;
+      const daysInMonth = isCurrentMonth ? today.getDate() : totalDaysInMonth;
 
       const startDate = `${query.month}-01`;
       const endDate = `${query.month}-${daysInMonth.toString().padStart(2, '0')}`;
@@ -723,7 +752,8 @@ export class CarDailyExpenseService {
           note: record.note,
           odometer_start: record.odometer_start,
           odometer_end: record.odometer_end,
-          responsible_employee_at_time: (record as any).responsible_employee_at_time,
+          responsible_employee_at_time: (record as any)
+            .responsible_employee_at_time,
           driver_at_time: (record as any).driver_at_time,
         });
       });
@@ -752,7 +782,6 @@ export class CarDailyExpenseService {
         mileage: number | null;
       }> = [];
 
-
       for (let day = 1; day <= daysInMonth; day++) {
         const date = `${query.month}-${day.toString().padStart(2, '0')}`;
         const dayExpenses = expensesByDate[date] || [];
@@ -760,7 +789,10 @@ export class CarDailyExpenseService {
         if (dayExpenses.length > 0) {
           const firstExpenseForDay = dayExpenses[0];
           const lastExpenseForDay = dayExpenses[dayExpenses.length - 1];
-          const dailyMileage = dayExpenses.reduce((sum, e) => sum + (e.mileage || 0), 0); // FAQAT shu kun, kumulativ EMAS
+          const dailyMileage = dayExpenses.reduce(
+            (sum, e) => sum + (e.mileage || 0),
+            0,
+          ); // FAQAT shu kun, kumulativ EMAS
 
           days.push({
             date,
@@ -1029,7 +1061,9 @@ export class CarDailyExpenseService {
               (r) => Number(r.month) === monthNum,
             );
 
-            const m_mileage = monthRecord ? Number(monthRecord.total_mileage) : 0;
+            const m_mileage = monthRecord
+              ? Number(monthRecord.total_mileage)
+              : 0;
             const m_received = monthRecord
               ? Number(monthRecord.total_received_amount)
               : 0;
@@ -1112,7 +1146,12 @@ export class CarDailyExpenseService {
   }
 
   private async collectOrganizationMonthlyData(
-    query: { year: number; month: number; is_active?: boolean; search?: string },
+    query: {
+      year: number;
+      month: number;
+      is_active?: boolean;
+      search?: string;
+    },
     options: { paginate: boolean; page?: number; limit?: number },
   ) {
     const year = Number(query.year);
@@ -1170,7 +1209,12 @@ export class CarDailyExpenseService {
     let carsData: any[] = [];
 
     if (carIds.length > 0) {
-      const [expenses, carFuelNorms, previousRecordsList, previousOdometerList] = await Promise.all([
+      const [
+        expenses,
+        carFuelNorms,
+        previousRecordsList,
+        previousOdometerList,
+      ] = await Promise.all([
         this.expenseRepo.findAll({
           where: {
             car_id: carIds,
@@ -1203,38 +1247,47 @@ export class CarDailyExpenseService {
             is_deleted: false,
           },
         }),
-        this.sequelize.query(`
+        this.sequelize.query(
+          `
           SELECT DISTINCT ON (car_id, fuel_id) car_id, fuel_id, balance_after
           FROM car_daily_expenses
           WHERE car_id IN (:carIds) AND date < :startDate
           ORDER BY car_id, fuel_id, date DESC, sequence_no DESC
-        `, {
-          replacements: { carIds, startDate },
-          type: QueryTypes.SELECT,
-        }),
-        this.sequelize.query(`
+        `,
+          {
+            replacements: { carIds, startDate },
+            type: QueryTypes.SELECT,
+          },
+        ),
+        this.sequelize.query(
+          `
           SELECT DISTINCT ON (car_id) car_id, odometer_end
           FROM car_daily_expenses
           WHERE car_id IN (:carIds) AND date < :startDate
           ORDER BY car_id, date DESC, sequence_no DESC
-        `, {
-          replacements: { carIds, startDate },
-          type: QueryTypes.SELECT,
-        })
+        `,
+          {
+            replacements: { carIds, startDate },
+            type: QueryTypes.SELECT,
+          },
+        ),
       ]);
 
       const previousRecordsMap = new Map<string, number>();
-      (previousRecordsList as any[]).forEach(row => {
-        previousRecordsMap.set(`${row.car_id}|${row.fuel_id}`, Number(row.balance_after) || 0);
+      (previousRecordsList as any[]).forEach((row) => {
+        previousRecordsMap.set(
+          `${row.car_id}|${row.fuel_id}`,
+          Number(row.balance_after) || 0,
+        );
       });
 
       const previousOdometerMap = new Map<string, number>();
-      (previousOdometerList as any[]).forEach(row => {
+      (previousOdometerList as any[]).forEach((row) => {
         previousOdometerMap.set(row.car_id, Number(row.odometer_end) || 0);
       });
 
       const normsByCar = new Map<string, CarFuelNorm[]>();
-      carFuelNorms.forEach(norm => {
+      carFuelNorms.forEach((norm) => {
         if (!normsByCar.has(norm.car_id)) {
           normsByCar.set(norm.car_id, []);
         }
@@ -1266,7 +1319,7 @@ export class CarDailyExpenseService {
           }
           const h = holidayByCar.get(exp.car_id)!;
           // ✅ Fuel.price o'rniga yozuv yaratilgan paytdagi fuel_price_at_time ishlatiladi
-          const price = Number(exp.fuel_price_at_time) || fuelMap.get(exp.fuel_id)?.price || 0;
+          const price = Number(exp.fuel_price_at_time) || 0;
           h.km += Number(exp.mileage) || 0;
           h.amount += Number(exp.fuel_expence) || 0;
           h.sum += (Number(exp.fuel_expence) || 0) * price;
@@ -1285,10 +1338,14 @@ export class CarDailyExpenseService {
         let carLastRecord: CarDailyExpense | null = null;
         if (fuelGroup) {
           fuelGroup.forEach((records) => {
-            records.forEach(r => {
+            records.forEach((r) => {
               if (!carLastRecord) {
                 carLastRecord = r;
-              } else if (r.date > carLastRecord.date || (r.date === carLastRecord.date && r.sequence_no > carLastRecord.sequence_no)) {
+              } else if (
+                r.date > carLastRecord.date ||
+                (r.date === carLastRecord.date &&
+                  r.sequence_no > carLastRecord.sequence_no)
+              ) {
                 carLastRecord = r;
               }
             });
@@ -1297,7 +1354,7 @@ export class CarDailyExpenseService {
 
         const start_odometer = previousOdometerMap.has(car.id)
           ? previousOdometerMap.get(car.id)
-          : (Number(car.initial_odometer) || 0);
+          : Number(car.initial_odometer) || 0;
 
         const end_odometer = carLastRecord
           ? Number(carLastRecord.odometer_end)
@@ -1306,9 +1363,10 @@ export class CarDailyExpenseService {
         let carTotalMileage = 0;
         let carTotalSum = 0;
         const fuelsResult: any[] = [];
+        const holidayFuelsResult: any[] = [];
 
         // faoliyatsiz fuel tushib qolmasligi uchun CarFuelNorm ro'yxati orqali aylanib o'tamiz
-        carNorms.forEach(norm => {
+        carNorms.forEach((norm) => {
           const fuelId = norm.fuel_id;
           const fuel = fuelMap.get(fuelId);
           const records = fuelGroup?.get(fuelId) || [];
@@ -1320,17 +1378,36 @@ export class CarDailyExpenseService {
           let startBalance = 0;
           let endBalance = 0;
 
+          let hReceivedAmount = 0;
+          let hReceivedSum = 0;
+          let hConsumedAmount = 0;
+          let hConsumedSum = 0;
+          let hMileage = 0;
+
           if (records.length > 0) {
             records.forEach((r) => {
               const rReceived = Number(r.received_amount) || 0;
               const rAmount = Number(r.fuel_expence) || 0;
-              // ✅ Har bir yozuvning saqlangan fuel_price_at_time narxi bo'yicha ko'paytiriladi
-              const rPrice = Number(r.fuel_price_at_time) || fuel?.price || 0;
-              carTotalMileage += Number(r.mileage) || 0;
-              receivedAmount += rReceived;
-              receivedSum += rReceived * rPrice;
-              consumedAmount += rAmount;
-              consumedSum += rAmount * rPrice;
+              const rPrice = Number(r.fuel_price_at_time) || 0;
+              const rMileage = Number(r.mileage) || 0;
+
+              if (r.is_holiday) {
+                carHoliday.km += rMileage;
+                carHoliday.amount += rAmount;
+                carHoliday.sum += rAmount * rPrice;
+
+                hMileage += rMileage;
+                hReceivedAmount += rReceived;
+                hReceivedSum += rReceived * rPrice;
+                hConsumedAmount += rAmount;
+                hConsumedSum += rAmount * rPrice;
+              } else {
+                carTotalMileage += rMileage;
+                receivedAmount += rReceived;
+                receivedSum += rReceived * rPrice;
+                consumedAmount += rAmount;
+                consumedSum += rAmount * rPrice;
+              }
             });
 
             carTotalSum += consumedSum;
@@ -1346,7 +1423,10 @@ export class CarDailyExpenseService {
             endBalance = Number(lastRec.balance_after) || 0;
           } else {
             const prevBalance = previousRecordsMap.get(`${car.id}|${fuelId}`);
-            startBalance = prevBalance !== undefined ? prevBalance : (Number(norm.initial_balance) || 0);
+            startBalance =
+              prevBalance !== undefined
+                ? prevBalance
+                : Number(norm.initial_balance) || 0;
             endBalance = startBalance;
           }
 
@@ -1361,6 +1441,19 @@ export class CarDailyExpenseService {
             consumed_sum: consumedSum,
             end_balance: endBalance,
           });
+
+          if (hReceivedAmount > 0 || hConsumedAmount > 0 || hMileage > 0) {
+            holidayFuelsResult.push({
+              fuel_id: fuelId,
+              fuel_name: fuel?.name || '',
+              fuel_unit: fuel?.unit || '',
+              km: hMileage,
+              received_amount: hReceivedAmount,
+              received_sum: hReceivedSum,
+              consumed_amount: hConsumedAmount,
+              consumed_sum: hConsumedSum,
+            });
+          }
         });
 
         return {
@@ -1383,6 +1476,7 @@ export class CarDailyExpenseService {
             amount: carHoliday.amount,
             sum: carHoliday.sum,
           },
+          holiday_fuels: holidayFuelsResult,
         };
       });
     }
@@ -1397,9 +1491,27 @@ export class CarDailyExpenseService {
 
     let grandTotalMileage = 0;
     let grandTotalSum = 0;
+    let grandTotalHolidayMileage = 0;
+    let grandTotalHolidaySum = 0;
+
     const grandTotalFuelsMap = new Map<
       string,
-      { received_amount: number; received_sum: number; amount: number; sum: number }
+      {
+        received_amount: number;
+        received_sum: number;
+        amount: number;
+        sum: number;
+      }
+    >();
+    const grandTotalHolidayFuelsMap = new Map<
+      string,
+      {
+        km: number;
+        received_amount: number;
+        received_sum: number;
+        amount: number;
+        sum: number;
+      }
     >();
     const grandTotalHoliday = { km: 0, amount: 0, sum: 0 };
 
@@ -1410,6 +1522,7 @@ export class CarDailyExpenseService {
             where: {
               car_id: allMatchingCarIds,
               date: { [Op.between]: [startDate, endDate] },
+              is_holiday: false,
             },
             attributes: [[fn('SUM', col('mileage')), 'total_mileage']],
             raw: true,
@@ -1418,6 +1531,7 @@ export class CarDailyExpenseService {
             where: {
               car_id: allMatchingCarIds,
               date: { [Op.between]: [startDate, endDate] },
+              is_holiday: false,
             },
             attributes: [
               'fuel_id',
@@ -1455,6 +1569,13 @@ export class CarDailyExpenseService {
                 ),
                 'sum',
               ],
+              [fn('SUM', col('received_amount')), 'total_received_amount'],
+              [
+                literal(
+                  'SUM(COALESCE("received_amount", 0) * COALESCE("fuel_price_at_time", 0))',
+                ),
+                'total_received_sum',
+              ],
             ],
             group: ['fuel_id'],
             raw: true,
@@ -1468,7 +1589,12 @@ export class CarDailyExpenseService {
         const received_sum = Number(row.total_received_sum) || 0;
         const amount = Number(row.total_consumed_amount) || 0;
         const sum = Number(row.total_consumed_sum) || 0;
-        grandTotalFuelsMap.set(row.fuel_id, { received_amount, received_sum, amount, sum });
+        grandTotalFuelsMap.set(row.fuel_id, {
+          received_amount,
+          received_sum,
+          amount,
+          sum,
+        });
         grandTotalSum += sum;
       });
 
@@ -1476,9 +1602,22 @@ export class CarDailyExpenseService {
         const km = Number(row.km) || 0;
         const amount = Number(row.amount) || 0;
         const sum = Number(row.sum) || 0;
+        const received_amount = Number(row.total_received_amount) || 0;
+        const received_sum = Number(row.total_received_sum) || 0;
+
         grandTotalHoliday.km += km;
         grandTotalHoliday.amount += amount;
         grandTotalHoliday.sum += sum;
+
+        grandTotalHolidayFuelsMap.set(row.fuel_id, {
+          km,
+          received_amount,
+          received_sum,
+          amount,
+          sum,
+        });
+        grandTotalHolidayMileage += km;
+        grandTotalHolidaySum += sum;
       });
     }
 
@@ -1497,6 +1636,22 @@ export class CarDailyExpenseService {
       },
     );
 
+    const grandTotalHolidayFuels = Array.from(
+      grandTotalHolidayFuelsMap.entries(),
+    ).map(([fuelId, val]) => {
+      const fuel = fuelMap.get(fuelId);
+      return {
+        fuel_id: fuelId,
+        fuel_name: fuel?.name || '',
+        fuel_unit: fuel?.unit || '',
+        km: val.km,
+        received_amount: val.received_amount,
+        received_sum: val.received_sum,
+        consumed_amount: val.amount,
+        consumed_sum: val.sum,
+      };
+    });
+
     const totalPages = paginate ? Math.ceil(total / limit) || 0 : 1;
 
     return {
@@ -1512,8 +1667,15 @@ export class CarDailyExpenseService {
         fuels: grandTotalFuels,
         total_sum: grandTotalSum,
         holiday: grandTotalHoliday,
+        holiday_fuels: grandTotalHolidayFuels,
+        grand_total_mileage: grandTotalMileage + grandTotalHolidayMileage,
+        grand_total_sum: grandTotalSum + grandTotalHolidaySum,
       },
-      all_fuels: fuelsList.map(f => ({ id: f.id, name: f.name, unit: f.unit })),
+      all_fuels: fuelsList.map((f) => ({
+        id: f.id,
+        name: f.name,
+        unit: f.unit,
+      })),
     };
   }
 
@@ -1532,6 +1694,7 @@ export class CarDailyExpenseService {
           group_total: {
             total_mileage: 0,
             fuelsMap: new Map<string, any>(),
+            holidayFuelsMap: new Map<string, any>(),
             total_sum: 0,
             holiday: { km: 0, amount: 0, sum: 0 },
           },
@@ -1541,12 +1704,12 @@ export class CarDailyExpenseService {
       const group = groupsMap.get(key);
       group.cars.push(carItem);
 
-      group.group_total.total_mileage += (Number(carItem.total_mileage) || 0);
-      group.group_total.total_sum += (Number(carItem.total_sum) || 0);
+      group.group_total.total_mileage += Number(carItem.total_mileage) || 0;
+      group.group_total.total_sum += Number(carItem.total_sum) || 0;
 
-      group.group_total.holiday.km += (Number(carItem.holiday?.km) || 0);
-      group.group_total.holiday.amount += (Number(carItem.holiday?.amount) || 0);
-      group.group_total.holiday.sum += (Number(carItem.holiday?.sum) || 0);
+      group.group_total.holiday.km += Number(carItem.holiday?.km) || 0;
+      group.group_total.holiday.amount += Number(carItem.holiday?.amount) || 0;
+      group.group_total.holiday.sum += Number(carItem.holiday?.sum) || 0;
 
       if (Array.isArray(carItem.fuels)) {
         carItem.fuels.forEach((f: any) => {
@@ -1562,38 +1725,62 @@ export class CarDailyExpenseService {
             });
           }
           const gf = group.group_total.fuelsMap.get(f.fuel_id);
-          gf.total_received_amount += (Number(f.received_amount) || 0);
-          gf.total_received_sum += (Number(f.received_sum) || 0);
-          gf.total_consumed_amount += (Number(f.consumed_amount) || 0);
-          gf.total_consumed_sum += (Number(f.consumed_sum) || 0);
+          gf.total_received_amount += Number(f.received_amount) || 0;
+          gf.total_received_sum += Number(f.received_sum) || 0;
+          gf.total_consumed_amount += Number(f.consumed_amount) || 0;
+          gf.total_consumed_sum += Number(f.consumed_sum) || 0;
+        });
+      }
+
+      if (Array.isArray(carItem.holiday_fuels)) {
+        carItem.holiday_fuels.forEach((f: any) => {
+          if (!group.group_total.holidayFuelsMap.has(f.fuel_id)) {
+            group.group_total.holidayFuelsMap.set(f.fuel_id, {
+              fuel_id: f.fuel_id,
+              fuel_name: f.fuel_name,
+              fuel_unit: f.fuel_unit,
+              total_km: 0,
+              total_received_amount: 0,
+              total_received_sum: 0,
+              total_consumed_amount: 0,
+              total_consumed_sum: 0,
+            });
+          }
+          const hf = group.group_total.holidayFuelsMap.get(f.fuel_id);
+          hf.total_km += Number(f.km) || 0;
+          hf.total_received_amount += Number(f.received_amount) || 0;
+          hf.total_received_sum += Number(f.received_sum) || 0;
+          hf.total_consumed_amount += Number(f.consumed_amount) || 0;
+          hf.total_consumed_sum += Number(f.consumed_sum) || 0;
         });
       }
     });
 
-    const groups = Array.from(groupsMap.values()).map(g => ({
+    const groups = Array.from(groupsMap.values()).map((g) => ({
       responsible_employee: g.responsible_employee,
       cars: g.cars,
       group_total: {
         total_mileage: g.group_total.total_mileage,
         fuels: Array.from(g.group_total.fuelsMap.values()),
+        holiday_fuels: Array.from(g.group_total.holidayFuelsMap.values()),
         total_sum: g.group_total.total_sum,
         holiday: g.group_total.holiday,
-      }
+      },
     }));
 
     // Sorting groups (optional but good for consistency), e.g. unassigned last or alphabetical
     groups.sort((a, b) => {
       if (!a.responsible_employee) return 1;
       if (!b.responsible_employee) return -1;
-      return (a.responsible_employee.full_name || '').localeCompare(b.responsible_employee.full_name || '');
+      return (a.responsible_employee.full_name || '').localeCompare(
+        b.responsible_employee.full_name || '',
+      );
     });
 
     return groups;
   }
 
-  async getOrganizationMonthlyReport(
-    query: OrganizationMonthlyReportQueryDto,
-  ) {
+  async getOrganizationMonthlyReport(query: OrganizationMonthlyReportQueryDto) {
     try {
       const flatDataResult = await this.collectOrganizationMonthlyData(query, {
         paginate: true,
@@ -1772,8 +1959,8 @@ export class CarDailyExpenseService {
         const fuelRecords = records.filter((r) => r.fuel_id === fuel.id);
         fuelRecords.forEach((r) => {
           const rReceived = Number(r.received_amount) || 0;
-          const rPrice = Number(r.fuel_price_at_time) || fuel.price || 0; // ✅ Yozuv yaratilgan paytdagi narx ishlatiladi
-          fuelReceivedPrice += (rReceived * rPrice);
+          const rPrice = Number(r.fuel_price_at_time) || 0; // ✅ Yozuv yaratilgan paytdagi narx ishlatiladi
+          fuelReceivedPrice += rReceived * rPrice;
         });
         summaryByFuel[fuel.id].total_received_price = fuelReceivedPrice;
       }
@@ -1794,7 +1981,6 @@ export class CarDailyExpenseService {
           id: f.id,
           name: f.name,
           unit: f.unit,
-          price: Number(f.price) || 0,
         })),
         year,
         month,
@@ -1817,12 +2003,18 @@ export class CarDailyExpenseService {
   async recalculateCarChain(carId: string, t: Transaction): Promise<void> {
     const records = await this.expenseRepo.findAll({
       where: { car_id: carId },
-      order: [['date', 'ASC'], ['createdAt', 'ASC']],
+      order: [
+        ['date', 'ASC'],
+        ['createdAt', 'ASC'],
+      ],
       transaction: t,
       lock: t.LOCK.UPDATE,
     });
 
-    const car = await this.carRepo.findByPk(carId, { transaction: t, lock: t.LOCK.UPDATE });
+    const car = await this.carRepo.findByPk(carId, {
+      transaction: t,
+      lock: t.LOCK.UPDATE,
+    });
     if (!car) throw new NotFoundException('Mashina topilmadi');
 
     let runningOdometer = car.initial_odometer;
@@ -1851,7 +2043,14 @@ export class CarDailyExpenseService {
           sequence_no: -(i + 1),
         })),
         {
-          updateOnDuplicate: ['id', 'sequence_no', 'odometer_start', 'odometer_end', 'balance_after', 'updatedAt'],
+          updateOnDuplicate: [
+            'id',
+            'sequence_no',
+            'odometer_start',
+            'odometer_end',
+            'balance_after',
+            'updatedAt',
+          ],
           conflictAttributes: ['id'],
           transaction: t,
         } as any,
@@ -1860,23 +2059,24 @@ export class CarDailyExpenseService {
 
     // ── 1-BOSQICH: Tarixdagi barcha normalarni BIR martalik so'rov bilan olish ──
     const normIds = Array.from(normIdMap.values());
-    const allNormHistories = normIds.length > 0
-      ? await this.carFuelNormHistoryService.getHistoriesForNorms(normIds, t)
-      : [];
+    const allNormHistories =
+      normIds.length > 0
+        ? await this.carFuelNormHistoryService.getHistoriesForNorms(normIds, t)
+        : [];
 
-    // Kesh qilingan normalardan to'g'ri sanadagi normani qidirish yordamchi funksiyasi
     const getNormAndPriceFromCache = (normId: string, date: string) => {
       let normPerKm = 0;
-      let price: number | null = null;
       for (const h of allNormHistories) {
         if (h.car_fuel_norm_id === normId) {
-          if (h.effective_from <= date && (!h.effective_to || h.effective_to >= date)) {
+          if (
+            h.effective_from <= date &&
+            (!h.effective_to || h.effective_to >= date)
+          ) {
             normPerKm = h.norm_per_100km;
-            price = h.fuel_price_at_time;
           }
         }
       }
-      return { normPerKm, price };
+      return { normPerKm };
     };
 
     const updates: any[] = [];
@@ -1891,22 +2091,22 @@ export class CarDailyExpenseService {
       const normId = normIdMap.get(record.fuel_id);
       let normPerKm = 0;
       let fuelPriceAtTime = record.fuel_price_at_time; // fallback: eski qiymat
-      
+
       if (normId) {
-        // 2. O'sha kungi haqiqiy norma va narx keshdan olinadi
+        // 2. O'sha kungi haqiqiy norma keshdan olinadi
         const cached = getNormAndPriceFromCache(normId, record.date);
         normPerKm = cached.normPerKm;
-        if (cached.price !== null) {
-          fuelPriceAtTime = cached.price;
-        }
       }
 
       // 3. Yoqilg'i xarajati yangi normadan kelib chiqib hisoblanadi
       const fuel_expence = (record.mileage * normPerKm) / 100;
 
       // 4. Balans qayta yoziladi
-      const prevBalance = balanceMap.has(record.fuel_id) ? balanceMap.get(record.fuel_id)! : 0;
-      const balance_after = prevBalance + (record.received_amount ?? 0) - fuel_expence;
+      const prevBalance = balanceMap.has(record.fuel_id)
+        ? balanceMap.get(record.fuel_id)!
+        : 0;
+      const balance_after =
+        prevBalance + (record.received_amount ?? 0) - fuel_expence;
       balanceMap.set(record.fuel_id, balance_after);
 
       updates.push({
@@ -1931,7 +2131,6 @@ export class CarDailyExpenseService {
           'odometer_start',
           'odometer_end',
           'fuel_expence',
-          'fuel_price_at_time',
           'norm_per_100km_at_time',
           'balance_after',
         ],
@@ -1941,10 +2140,13 @@ export class CarDailyExpenseService {
     }
 
     // 5. Yakuniy holat saqlanadi
-    await car.update({
-      odometer: runningOdometer,
-      last_sequence_no: sequenceCounter,
-    }, { transaction: t });
+    await car.update(
+      {
+        odometer: runningOdometer,
+        last_sequence_no: sequenceCounter,
+      },
+      { transaction: t },
+    );
 
     // 6. Car fuel norms balansi bulk bilan saqlanadi
     if (carFuelNorms.length > 0) {

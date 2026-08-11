@@ -137,7 +137,8 @@ export class CarDailyExpense extends Model<
 
   @Column({
     type: DataType.DECIMAL(15, 2),
-    allowNull: false,
+    allowNull: true,
+    defaultValue: 0,
     get: decimalGetter('fuel_price_at_time'),
   })
   declare fuel_price_at_time: number;

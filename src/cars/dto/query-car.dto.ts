@@ -91,7 +91,8 @@ export class QueryCarDto {
   @IsOptional()
   @IsString({ message: "Saralash ustuni matn ko'rinishida bo'lishi kerak" })
   @IsIn(['name', 'plate_number', 'createdAt'], {
-    message: "Saralash ustuni quyidagilardan biri bo'lishi kerak: name, plate_number, createdAt",
+    message:
+      "Saralash ustuni quyidagilardan biri bo'lishi kerak: name, plate_number, createdAt",
   })
   sortBy?: string = 'createdAt';
 

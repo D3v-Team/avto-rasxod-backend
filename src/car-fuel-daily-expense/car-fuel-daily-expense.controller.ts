@@ -20,7 +20,7 @@ import {
   ApiQuery,
   ApiParam,
 } from '@nestjs/swagger';
-import { CarDailyExpenseService } from './car-daily-expense.service';
+import { CarDailyExpenseService } from './car-fuel-daily-expense.service';
 import { CreateCarDailyExpenseDto } from './dto/create-car-daily-expense.dto';
 import { UpdateCarDailyExpenseDto } from './dto/update-car-daily-expense.dto';
 import { QueryCarDailyExpenseDto } from './dto/query-car-daily-expense.dto';
@@ -138,7 +138,7 @@ export class CarDailyExpenseController {
   }
 
   @ApiOperation({
-    summary: "Tashkilot oylik hisobotini Excel formatida yuklab olish",
+    summary: 'Tashkilot oylik hisobotini Excel formatida yuklab olish',
   })
   @ApiResponse({
     status: 200,
@@ -219,11 +219,12 @@ export class CarDailyExpenseController {
   }
 
   @ApiOperation({
-    summary: "Mashinaning oylik yoqilg'i jamlanmasi (oy boshiga/oxiriga balans)",
+    summary:
+      "Mashinaning oylik yoqilg'i jamlanmasi (oy boshiga/oxiriga balans)",
   })
   @ApiResponse({
     status: 200,
-    description: 'Oylik yoqilg\'i jamlanmasi muvaffaqiyatli olindi',
+    description: "Oylik yoqilg'i jamlanmasi muvaffaqiyatli olindi",
   })
   @ApiResponse({ status: 404, description: 'Hisobot topilmadi' })
   @ApiResponse({ status: 401, description: "Ruxsat yo'q" })

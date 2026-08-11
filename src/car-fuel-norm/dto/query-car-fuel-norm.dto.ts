@@ -43,7 +43,9 @@ export class QueryCarFuelNormDto {
     required: false,
   })
   @IsOptional()
-  @IsUUID('4', { message: "Mashina ID si to'g'ri UUID formatida bo'lishi kerak" })
+  @IsUUID('4', {
+    message: "Mashina ID si to'g'ri UUID formatida bo'lishi kerak",
+  })
   car_id?: string;
 
   @ApiProperty({
@@ -52,7 +54,9 @@ export class QueryCarFuelNormDto {
     required: false,
   })
   @IsOptional()
-  @IsUUID('4', { message: "Yoqilg'i turi ID si to'g'ri UUID formatida bo'lishi kerak" })
+  @IsUUID('4', {
+    message: "Yoqilg'i turi ID si to'g'ri UUID formatida bo'lishi kerak",
+  })
   fuel_id?: string;
 
   @ApiProperty({
@@ -74,7 +78,8 @@ export class QueryCarFuelNormDto {
   @IsOptional()
   @IsString({ message: "Saralash ustuni matn ko'rinishida bo'lishi kerak" })
   @IsIn(['norm_per_100km', 'current_balance', 'createdAt'], {
-    message: "Saralash ustuni quyidagilardan biri bo'lishi kerak: norm_per_100km, current_balance, createdAt",
+    message:
+      "Saralash ustuni quyidagilardan biri bo'lishi kerak: norm_per_100km, current_balance, createdAt",
   })
   sortBy?: string = 'createdAt';
 

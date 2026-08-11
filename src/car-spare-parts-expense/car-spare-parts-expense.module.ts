@@ -7,9 +7,7 @@ import { Car } from '../cars/models/cars.models';
 import { Employee } from '../employees/models/employee.model';
 
 @Module({
-  imports: [
-    SequelizeModule.forFeature([CarSparePartsExpense, Car, Employee]),
-  ],
+  imports: [SequelizeModule.forFeature([CarSparePartsExpense, Car, Employee])],
   controllers: [CarSparePartsExpenseController],
   providers: [CarSparePartsExpenseService],
   exports: [CarSparePartsExpenseService],

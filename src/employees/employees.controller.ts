@@ -89,10 +89,10 @@ export class EmployeesController {
     return this.employeesService.remove(id);
   }
 
-  @ApiOperation({ summary: "Xodimni tiklash" })
+  @ApiOperation({ summary: 'Xodimni tiklash' })
   @ApiResponse({
     status: 200,
-    description: "Xodim muvaffaqiyatli tiklandi",
+    description: 'Xodim muvaffaqiyatli tiklandi',
   })
   @ApiResponse({ status: 404, description: 'Xodim topilmadi' })
   @ApiResponse({ status: 401, description: "Ruxsat yo'q" })

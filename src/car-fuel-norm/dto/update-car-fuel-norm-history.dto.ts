@@ -6,7 +6,10 @@ export class UpdateCarFuelNormHistoryDto {
     description: 'Yangi qiymat qaysi sanadan boshlab amal qilishi (YYYY-MM-DD)',
     example: '2026-10-01',
   })
-  @IsDateString({}, { message: 'Amal qilish sanasi to\'g\'ri formatda bo\'lishi kerak' })
+  @IsDateString(
+    {},
+    { message: "Amal qilish sanasi to'g'ri formatda bo'lishi kerak" },
+  )
   effective_from: string;
 
   @ApiPropertyOptional({
@@ -14,16 +17,16 @@ export class UpdateCarFuelNormHistoryDto {
     example: 12.5,
   })
   @IsOptional()
-  @IsNumber({}, { message: 'Yangi norma raqam bo\'lishi kerak' })
-  @Min(0, { message: 'Yangi norma manfiy bo\'lishi mumkin emas' })
+  @IsNumber({}, { message: "Yangi norma raqam bo'lishi kerak" })
+  @Min(0, { message: "Yangi norma manfiy bo'lishi mumkin emas" })
   norm_per_100km?: number;
 
   @ApiPropertyOptional({
-    description: 'Yangi yoqilg\'i narxi (1 litr uchun)',
+    description: "Yangi yoqilg'i narxi (1 litr uchun)",
     example: 12500,
   })
   @IsOptional()
-  @IsNumber({}, { message: 'Yangi narx raqam bo\'lishi kerak' })
-  @Min(0, { message: 'Yangi narx manfiy bo\'lishi mumkin emas' })
+  @IsNumber({}, { message: "Yangi narx raqam bo'lishi kerak" })
+  @Min(0, { message: "Yangi narx manfiy bo'lishi mumkin emas" })
   price?: number;
 }

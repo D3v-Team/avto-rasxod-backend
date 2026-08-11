@@ -9,7 +9,7 @@ import {
 } from 'sequelize-typescript';
 import { Employee } from '../../employees/models/employee.model';
 import { CarFuelNorm } from '../../car-fuel-norm/models/car-fuel-norm.model';
-import { CarDailyExpense } from '../../car-daily-expense/models/car-daily-expense.model';
+import { CarDailyExpense } from '../../car-fuel-daily-expense/models/car-fuel-daily-expense.model';
 import { CarSparePartsExpense } from '../../car-spare-parts-expense/models/car-spare-parts-expense.model';
 
 interface CarAttr {

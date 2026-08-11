@@ -32,7 +32,7 @@ import { UserRole } from '../common/enums/user-role.enum';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('cars')
 export class CarController {
-  constructor(private readonly carService: CarService) { }
+  constructor(private readonly carService: CarService) {}
 
   @ApiOperation({ summary: 'Yangi mashina yaratish' })
   @ApiResponse({ status: 201, description: 'Mashina muvaffaqiyatli yaratildi' })
@@ -86,7 +86,7 @@ export class CarController {
   @ApiOperation({ summary: "ID bo'yicha mashina tiklash" })
   @ApiResponse({
     status: 200,
-    description: "Mashina muvaffaqiyatli tiklandi",
+    description: 'Mashina muvaffaqiyatli tiklandi',
   })
   @ApiResponse({ status: 404, description: 'Mashina topilmadi' })
   @ApiResponse({ status: 401, description: "Ruxsat yo'q" })
@@ -97,7 +97,10 @@ export class CarController {
   }
 
   @Patch(':id/correct-initial-speedometer')
-  @ApiOperation({ summary: "Mashinaning boshlang'ich spidometr ko'rsatkichini tuzatish (butun xarajatlar zanjiri qayta hisoblanadi)" })
+  @ApiOperation({
+    summary:
+      "Mashinaning boshlang'ich spidometr ko'rsatkichini tuzatish (butun xarajatlar zanjiri qayta hisoblanadi)",
+  })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
   correctInitialSpeedometer(
     @Param('id', ParseUUIDPipe) id: string,
@@ -130,5 +133,4 @@ export class CarController {
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.carService.remove(id);
   }
-
 }

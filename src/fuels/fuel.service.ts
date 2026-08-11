@@ -106,7 +106,9 @@ export class FuelService {
     try {
       const fuel = await this.fuelRepo.findByPk(id);
       if (!fuel) {
-        throw new NotFoundException(`ID ${id} bo'yicha yoqilg'i turi topilmadi`);
+        throw new NotFoundException(
+          `ID ${id} bo'yicha yoqilg'i turi topilmadi`,
+        );
       }
       return fuel;
     } catch (error) {

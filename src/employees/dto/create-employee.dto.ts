@@ -19,7 +19,8 @@ export class CreateEmployeeDto {
     description: 'Xodim roli',
   })
   @IsEnum(EmployeeRole, {
-    message: "Xodim roli quyidagilardan biri bo'lishi kerak: DRIVER, RESPONSIBLE",
+    message:
+      "Xodim roli quyidagilardan biri bo'lishi kerak: DRIVER, RESPONSIBLE",
   })
   role: EmployeeRole;
 }
