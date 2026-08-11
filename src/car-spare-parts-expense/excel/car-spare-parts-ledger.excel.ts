@@ -40,7 +40,7 @@ export async function generateCarSparePartsLedgerExcel(
   const org = orgName || 'Ташкилот';
   const fromFormatted = formatDate(dateFrom).replace('г', '');
   const toFormatted = formatDate(dateTo).replace('г', '');
-  
+
   sheet.mergeCells(1, 1, 1, endColIndex);
   const titleCell = sheet.getCell(1, 1);
   titleCell.value = `${org} ${fromFormatted} — ${toFormatted} даврида 1040-счет бўйича авто эҳтиёт қисмлар харажати юзасидан ҳисобот`;
@@ -55,14 +55,14 @@ export async function generateCarSparePartsLedgerExcel(
   sheet.getCell('D2').value = 'Наименование авто/запч';
   sheet.getCell('E2').value = 'Дебет счетов';
   sheet.getCell('F2').value = 'Сумма накладной';
-  
+
   sheet.mergeCells(2, 7, 2, endColIndex);
   const creditTitle = sheet.getCell(2, 7);
   creditTitle.value = 'Кредит счета 1040 (списываются на автомашины)';
-  
+
   // 3-qator: Avtolar sarlavhasi
   let colIndex = 7;
-  cars.forEach(car => {
+  cars.forEach((car) => {
     sheet.mergeCells(3, colIndex, 3, colIndex + 1);
     sheet.getCell(3, colIndex).value = `${car.name} (${car.plate_number})`;
     colIndex += 2;
@@ -133,13 +133,13 @@ export async function generateCarSparePartsLedgerExcel(
     row.getCell(3).value = docNum;
     row.getCell(4).value = expense.part_name;
     row.getCell(5).value = ''; // Дебет счетов doim bo'sh
-    
+
     const price = Number(expense.total_price) || 0;
     row.getCell(6).value = price;
     totalSum += price;
 
     colIndex = 7;
-    cars.forEach(car => {
+    cars.forEach((car) => {
       if (car.id === expense.car_id) {
         row.getCell(colIndex).value = `${expense.quantity} ${expense.unit}`;
         row.getCell(colIndex + 1).value = price;
@@ -159,7 +159,7 @@ export async function generateCarSparePartsLedgerExcel(
     }
 
     currentRowNum++;
-    
+
     // Oxirgi qator bo'lsa, qolgan guruhni merge qilib qo'yish
     if (index === expenses.length - 1) {
       if (currentRowNum - 1 > groupStartRow) {
@@ -175,14 +175,14 @@ export async function generateCarSparePartsLedgerExcel(
   totalLabel.value = 'Жами';
   totalLabel.font = { bold: true };
   totalLabel.alignment = { horizontal: 'right', vertical: 'middle' };
-  
+
   const finalTotalCell = sheet.getCell(currentRowNum, 6);
   finalTotalCell.value = totalSum;
   finalTotalCell.font = { bold: true };
   finalTotalCell.numFmt = '#,##0';
 
   colIndex = 7;
-  cars.forEach(car => {
+  cars.forEach((car) => {
     // Soni bo'sh qoladi
     const sumCell = sheet.getCell(currentRowNum, colIndex + 1);
     sumCell.value = carSums[car.id] || 0;

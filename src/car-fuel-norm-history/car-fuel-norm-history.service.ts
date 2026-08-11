@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { InjectModel, InjectConnection } from '@nestjs/sequelize';
 import { Transaction, Op } from 'sequelize';
 import { Sequelize } from 'sequelize-typescript';
@@ -12,7 +16,12 @@ export class CarFuelNormHistoryService {
     @InjectConnection() private readonly sequelize: Sequelize,
   ) {}
 
-  async createInitialHistory(carFuelNormId: string, norm_per_100km: number, effectiveFrom?: string, transaction?: Transaction) {
+  async createInitialHistory(
+    carFuelNormId: string,
+    norm_per_100km: number,
+    effectiveFrom?: string,
+    transaction?: Transaction,
+  ) {
     return this.historyRepo.create(
       {
         car_fuel_norm_id: carFuelNormId,
@@ -20,11 +29,15 @@ export class CarFuelNormHistoryService {
         effective_from: effectiveFrom || new Date().toISOString().split('T')[0],
         effective_to: null,
       },
-      { transaction }
+      { transaction },
     );
   }
 
-  async closeActiveHistory(carFuelNormId: string, effectiveTo: string, transaction?: Transaction) {
+  async closeActiveHistory(
+    carFuelNormId: string,
+    effectiveTo: string,
+    transaction?: Transaction,
+  ) {
     const openHistory = await this.historyRepo.findOne({
       where: { car_fuel_norm_id: carFuelNormId, effective_to: null },
       transaction,
@@ -36,25 +49,22 @@ export class CarFuelNormHistoryService {
     }
   }
 
-
-
-  async getNormForDate(carFuelNormId: string, date: string, transaction?: Transaction): Promise<number> {
+  async getNormForDate(
+    carFuelNormId: string,
+    date: string,
+    transaction?: Transaction,
+  ): Promise<number> {
     const historyRecord = await this.historyRepo.findOne({
       where: {
         car_fuel_norm_id: carFuelNormId,
         effective_from: { [Op.lte]: date },
-        [Op.or]: [
-          { effective_to: null },
-          { effective_to: { [Op.gte]: date } },
-        ],
+        [Op.or]: [{ effective_to: null }, { effective_to: { [Op.gte]: date } }],
       },
       transaction,
     });
 
     if (!historyRecord) {
-      throw new NotFoundException(
-        "Shu sana uchun yoqilg'i normasi topilmadi",
-      );
+      throw new NotFoundException("Shu sana uchun yoqilg'i normasi topilmadi");
     }
 
     return historyRecord.norm_per_100km;
@@ -69,10 +79,7 @@ export class CarFuelNormHistoryService {
       where: {
         car_fuel_norm_id: carFuelNormId,
         effective_from: { [Op.lte]: date },
-        [Op.or]: [
-          { effective_to: null },
-          { effective_to: { [Op.gte]: date } },
-        ],
+        [Op.or]: [{ effective_to: null }, { effective_to: { [Op.gte]: date } }],
       },
       order: [['effective_from', 'DESC']],
       transaction: t,
@@ -81,7 +88,10 @@ export class CarFuelNormHistoryService {
     return historyRecord ? historyRecord.fuel_price_at_time : null;
   }
 
-  async getHistoriesForNorms(carFuelNormIds: string[], transaction?: Transaction): Promise<CarFuelNormHistory[]> {
+  async getHistoriesForNorms(
+    carFuelNormIds: string[],
+    transaction?: Transaction,
+  ): Promise<CarFuelNormHistory[]> {
     return this.historyRepo.findAll({
       where: { car_fuel_norm_id: { [Op.in]: carFuelNormIds } },
       order: [['effective_from', 'ASC']],

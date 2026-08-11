@@ -1,10 +1,10 @@
 import {
-    BelongsTo,
-    Column,
-    DataType,
-    ForeignKey,
-    Model,
-    Table,
+  BelongsTo,
+  Column,
+  DataType,
+  ForeignKey,
+  Model,
+  Table,
 } from 'sequelize-typescript';
 import { Car } from '../../cars/models/cars.models';
 import { Employee } from '../../employees/models/employee.model';

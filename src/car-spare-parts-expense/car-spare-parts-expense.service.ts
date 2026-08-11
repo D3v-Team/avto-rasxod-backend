@@ -16,7 +16,7 @@ import { ReportQueryDto } from './dto/report-query.dto';
 import { generateCarSparePartsReportExcel } from './excel/car-spare-parts-report.excel';
 import { generateCarSparePartsLedgerExcel } from './excel/car-spare-parts-ledger.excel';
 import { ConfigService } from '@nestjs/config';
-const include:IncludeOptions[] = [
+const include: IncludeOptions[] = [
   {
     model: Car,
     as: 'car',
@@ -26,13 +26,13 @@ const include:IncludeOptions[] = [
     model: Employee,
     as: 'responsible_employee',
     attributes: ['id', 'full_name'],
-    required: false,   // ← qo'shildi
+    required: false, // ← qo'shildi
   },
   {
     model: Employee,
     as: 'driver',
     attributes: ['id', 'full_name'],
-    required: false,   // ← qo'shildi
+    required: false, // ← qo'shildi
   },
 ];
 @Injectable()
@@ -42,7 +42,7 @@ export class CarSparePartsExpenseService {
     private readonly expenseRepo: typeof CarSparePartsExpense,
     @InjectModel(Car) private readonly carRepo: typeof Car,
     private readonly configService: ConfigService,
-  ) { }
+  ) {}
 
   async findAll(query: QueryCarSparePartsExpenseDto) {
     try {
@@ -56,7 +56,7 @@ export class CarSparePartsExpenseService {
         search,
       } = query;
       const offset = (page - 1) * limit;
-      console.log('query', query)
+      console.log('query', query);
       const where: WhereOptions = {};
 
       if (car_id) {
@@ -82,24 +82,24 @@ export class CarSparePartsExpenseService {
       }
 
       const include: IncludeOptions[] = [
-  {
-    model: Car,
-    as: 'car',
-    attributes: ['id', 'name', 'plate_number'],
-  },
-  {
-    model: Employee,
-    as: 'responsible_employee',
-    attributes: ['id', 'full_name'],
-    required: false,   // ← qo'shildi
-  },
-  {
-    model: Employee,
-    as: 'driver',
-    attributes: ['id', 'full_name'],
-    required: false,   // ← qo'shildi
-  },
-];
+        {
+          model: Car,
+          as: 'car',
+          attributes: ['id', 'name', 'plate_number'],
+        },
+        {
+          model: Employee,
+          as: 'responsible_employee',
+          attributes: ['id', 'full_name'],
+          required: false, // ← qo'shildi
+        },
+        {
+          model: Employee,
+          as: 'driver',
+          attributes: ['id', 'full_name'],
+          required: false, // ← qo'shildi
+        },
+      ];
 
       const [data, total] = await Promise.all([
         this.expenseRepo.findAll({
@@ -156,16 +156,27 @@ export class CarSparePartsExpenseService {
 
       // Ehtiyot qismlarni sana bo'yicha tartiblash (ASC) chunki include ichida order berish ba'zan to'g'ri ishlamasligi mumkin
       cars.forEach((car) => {
-        if (car.car_spare_parts_expenses && car.car_spare_parts_expenses.length > 0) {
+        if (
+          car.car_spare_parts_expenses &&
+          car.car_spare_parts_expenses.length > 0
+        ) {
           car.car_spare_parts_expenses.sort((a, b) => {
             return new Date(a.date).getTime() - new Date(b.date).getTime();
           });
         }
       });
 
-      const orgName = this.configService.get<string>('ORGANIZATION_NAME', 'ЎҚУФ Сирдарё вилояти Кенгашининг');
+      const orgName = this.configService.get<string>(
+        'ORGANIZATION_NAME',
+        'ЎҚУФ Сирдарё вилояти Кенгашининг',
+      );
 
-      return await generateCarSparePartsReportExcel(cars, date_from, date_to, orgName);
+      return await generateCarSparePartsReportExcel(
+        cars,
+        date_from,
+        date_to,
+        orgName,
+      );
     } catch (error) {
       console.error('CarSparePartsExpense exportExcelReport error:', error);
       throw new InternalServerErrorException(
@@ -197,13 +208,19 @@ export class CarSparePartsExpenseService {
       ],
     });
 
-    return generateCarSparePartsLedgerExcel(expenses, cars, dateFrom, dateTo, orgName);
+    return generateCarSparePartsLedgerExcel(
+      expenses,
+      cars,
+      dateFrom,
+      dateTo,
+      orgName,
+    );
   }
 
   async findOne(id: string): Promise<CarSparePartsExpense> {
     try {
       const expense = await this.expenseRepo.findByPk(id, {
-        include
+        include,
       });
 
       if (!expense) {
@@ -220,10 +237,11 @@ export class CarSparePartsExpenseService {
     }
   }
 
-  async create(dto: CreateCarSparePartsExpenseDto): Promise<CarSparePartsExpense> {
+  async create(
+    dto: CreateCarSparePartsExpenseDto,
+  ): Promise<CarSparePartsExpense> {
     try {
-      const car = await this.carRepo.findByPk(dto.car_id, {
-      });
+      const car = await this.carRepo.findByPk(dto.car_id, {});
       if (!car) {
         throw new NotFoundException('Mashina topilmadi');
       }
@@ -233,7 +251,6 @@ export class CarSparePartsExpenseService {
         responsible_employee_id_at_time: car.responsible_employee?.id || null,
         driver_id_at_time: car.driver?.id || null,
       });
-      
     } catch (error) {
       if (error instanceof HttpException) throw error;
       console.error('CarSparePartsExpense create error:', error);

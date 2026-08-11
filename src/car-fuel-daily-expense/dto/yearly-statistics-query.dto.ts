@@ -1,6 +1,14 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
-import { IsBoolean, IsInt, IsNotEmpty, IsOptional, IsUUID, Max, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsUUID,
+  Max,
+  Min,
+} from 'class-validator';
 
 export class YearlyStatisticsQueryDto {
   @ApiProperty({ example: 2026, description: 'Yil (2000-2100)' })
@@ -11,12 +19,20 @@ export class YearlyStatisticsQueryDto {
   @Max(2100, { message: "Yil ko'pi bilan 2100 bo'lishi kerak" })
   year: number;
 
-  @ApiProperty({ required: false, description: "Mashina ID kaliti bo'yicha filter" })
+  @ApiProperty({
+    required: false,
+    description: "Mashina ID kaliti bo'yicha filter",
+  })
   @IsOptional()
-  @IsUUID('4', { message: "Mashina ID si to'g'ri UUID formatida bo'lishi kerak" })
+  @IsUUID('4', {
+    message: "Mashina ID si to'g'ri UUID formatida bo'lishi kerak",
+  })
   car_id?: string;
 
-  @ApiProperty({ required: false, description: 'Mashina faol yoki faol emasligi bo‘yicha filter' })
+  @ApiProperty({
+    required: false,
+    description: 'Mashina faol yoki faol emasligi bo‘yicha filter',
+  })
   @IsOptional()
   @Transform(({ value }) => {
     if (value === undefined || value === null || value === '') return undefined;

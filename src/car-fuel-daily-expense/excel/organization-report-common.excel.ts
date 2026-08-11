@@ -1,23 +1,41 @@
 import * as ExcelJS from 'exceljs';
 
 export const CYRILLIC_MONTHS: Record<number, string> = {
-  1: 'Январь', 2: 'Феврал', 3: 'Март', 4: 'Апрель', 5: 'Май', 6: 'Июнь',
-  7: 'Июль', 8: 'Август', 9: 'Сентябр', 10: 'Октябр', 11: 'Ноябр', 12: 'Декабр',
+  1: 'Январь',
+  2: 'Феврал',
+  3: 'Март',
+  4: 'Апрель',
+  5: 'Май',
+  6: 'Июнь',
+  7: 'Июль',
+  8: 'Август',
+  9: 'Сентябр',
+  10: 'Октябр',
+  11: 'Ноябр',
+  12: 'Декабр',
 };
 
 export const FONT_NAME = 'Arial';
 
 export const HEADER_FILL: ExcelJS.Fill = {
-  type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD9D9D9' },
+  type: 'pattern',
+  pattern: 'solid',
+  fgColor: { argb: 'FFD9D9D9' },
 };
 export const CAR_TITLE_FILL: ExcelJS.Fill = {
-  type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF2F2F2' },
+  type: 'pattern',
+  pattern: 'solid',
+  fgColor: { argb: 'FFF2F2F2' },
 };
 export const JAMI_FILL: ExcelJS.Fill = {
-  type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFC9C9C9' },
+  type: 'pattern',
+  pattern: 'solid',
+  fgColor: { argb: 'FFC9C9C9' },
 };
 export const GRAND_FILL: ExcelJS.Fill = {
-  type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFB0B0B0' },
+  type: 'pattern',
+  pattern: 'solid',
+  fgColor: { argb: 'FFB0B0B0' },
 };
 
 export const THIN_BORDER: Partial<ExcelJS.Borders> = {
@@ -61,13 +79,17 @@ export function buildHeaderRows(
   const totalSumCol = consumedStartCol + fuelCount * 2;
   const endBalanceCol = totalSumCol + 1;
   const holidayStartCol = endBalanceCol + fuelCount;
-  const totalCols = holidayStartCol + 2;
+  const totalCols = holidayStartCol + 3;
 
   worksheet.mergeCells(1, 1, 1, totalCols);
   const titleCell = worksheet.getCell(1, 1);
   titleCell.value = `ЎКУФ Сирдарё вилоят кенгаши балансидаги автотранспорт воситалари томонидан ${year} йил ${monthName} ойида сарфланган ёқилғи харажатлари бўйича Хисобот`;
   titleCell.font = { name: FONT_NAME, size: 10, bold: true };
-  titleCell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+  titleCell.alignment = {
+    horizontal: 'center',
+    vertical: 'middle',
+    wrapText: true,
+  };
   worksheet.getRow(1).height = 26;
 
   worksheet.mergeCells(2, 1, 3, 1);
@@ -83,11 +105,17 @@ export function buildHeaderRows(
   worksheet.mergeCells(2, startBalanceCol, 2, startBalanceCol + fuelCount - 1);
   worksheet.getCell(2, startBalanceCol).value = 'Ой бошига қолдиқ';
   fuels.forEach((fuel, i) => {
-    worksheet.getCell(3, startBalanceCol + i).value = `${fuel.name} ${fuel.unit}`;
+    worksheet.getCell(3, startBalanceCol + i).value =
+      `${fuel.name} ${fuel.unit}`;
   });
 
   // Ой давомида сарфланган (har fuel: миqdor + сумма)
-  worksheet.mergeCells(2, consumedStartCol, 2, consumedStartCol + fuelCount * 2 - 1);
+  worksheet.mergeCells(
+    2,
+    consumedStartCol,
+    2,
+    consumedStartCol + fuelCount * 2 - 1,
+  );
   worksheet.getCell(2, consumedStartCol).value = 'Ой давомида сарфланган';
   fuels.forEach((fuel, i) => {
     const col = consumedStartCol + i * 2;
@@ -107,11 +135,13 @@ export function buildHeaderRows(
   });
 
   // Дам олиш кунлари
-  worksheet.mergeCells(2, holidayStartCol, 2, holidayStartCol + 2);
-  worksheet.getCell(2, holidayStartCol).value = 'Дам олиш кунлари ва байрам саналарида';
-  worksheet.getCell(3, holidayStartCol).value = 'км';
-  worksheet.getCell(3, holidayStartCol + 1).value = 'миқдор';
-  worksheet.getCell(3, holidayStartCol + 2).value = 'суммаси';
+  worksheet.mergeCells(2, holidayStartCol, 2, holidayStartCol + 3);
+  worksheet.getCell(2, holidayStartCol).value =
+    'Дам олиш кунлари ва байрам саналарида';
+  worksheet.getCell(3, holidayStartCol).value = 'Ёқилғи';
+  worksheet.getCell(3, holidayStartCol + 1).value = 'км';
+  worksheet.getCell(3, holidayStartCol + 2).value = 'миқдор';
+  worksheet.getCell(3, holidayStartCol + 3).value = 'суммаси';
 
   [2, 3].forEach((rowNum) => {
     const row = worksheet.getRow(rowNum);
@@ -119,19 +149,34 @@ export function buildHeaderRows(
     row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
       if (colNumber <= totalCols) {
         cell.font = { name: FONT_NAME, size: 7, bold: true };
-        cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+        cell.alignment = {
+          horizontal: 'center',
+          vertical: 'middle',
+          wrapText: true,
+        };
         cell.fill = HEADER_FILL;
         cell.border = THIN_BORDER;
       }
     });
   });
 
-  return { totalCols, startBalanceCol, consumedStartCol, totalSumCol, endBalanceCol, holidayStartCol };
+  return {
+    totalCols,
+    startBalanceCol,
+    consumedStartCol,
+    totalSumCol,
+    endBalanceCol,
+    holidayStartCol,
+  };
 }
 
 export function styleDataCell(
   cell: ExcelJS.Cell,
-  opts: { bold?: boolean; fill?: ExcelJS.Fill; align?: 'left' | 'center' | 'right' } = {},
+  opts: {
+    bold?: boolean;
+    fill?: ExcelJS.Fill;
+    align?: 'left' | 'center' | 'right';
+  } = {},
 ) {
   cell.border = THIN_BORDER;
   cell.font = { name: FONT_NAME, size: 7.5, bold: !!opts.bold };
@@ -155,7 +200,12 @@ export function applyA4LandscapeSetup(worksheet: ExcelJS.Worksheet) {
   worksheet.pageSetup.fitToHeight = 0;
   worksheet.pageSetup.horizontalCentered = true;
   worksheet.pageSetup.margins = {
-    left: 0.3, right: 0.3, top: 0.4, bottom: 0.4, header: 0.2, footer: 0.2,
+    left: 0.3,
+    right: 0.3,
+    top: 0.4,
+    bottom: 0.4,
+    header: 0.2,
+    footer: 0.2,
   };
 }
 
@@ -174,39 +224,66 @@ export function setColumnWidths(
   }
 }
 
-
-
 export function formatDataRow(
   row: ExcelJS.Row,
   totalCols: number = 19,
   isSummary: boolean = false,
   isGroupHeader: boolean = false,
-  bgColor: string = ''
+  bgColor: string = '',
 ) {
   row.height = isGroupHeader ? 18 : isSummary ? 20 : 28;
 
   for (let colNumber = 1; colNumber <= totalCols; colNumber++) {
     const cell = row.getCell(colNumber);
-    cell.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+    cell.border = {
+      top: { style: 'thin' },
+      left: { style: 'thin' },
+      bottom: { style: 'thin' },
+      right: { style: 'thin' },
+    };
 
     if (isGroupHeader) {
       cell.font = { name: 'Arial', size: 8, bold: true };
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor || 'FFFAFAFA' } };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: bgColor || 'FFFAFAFA' },
+      };
       cell.alignment = { vertical: 'middle', horizontal: 'center' };
     } else if (isSummary) {
       cell.font = { name: 'Arial', size: 8, bold: true };
-      if (bgColor) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor } };
-      cell.alignment = { vertical: 'middle', horizontal: colNumber === 2 ? 'center' : 'right' };
+      if (bgColor)
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: bgColor },
+        };
+      cell.alignment = {
+        vertical: 'middle',
+        horizontal: colNumber === 2 ? 'center' : 'right',
+      };
       if (typeof cell.value === 'number') cell.numFmt = '#,##0';
     } else {
       cell.font = { name: 'Arial', size: 7.5 };
-      if (bgColor) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: bgColor } };
+      if (bgColor)
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: bgColor },
+        };
 
-      if (colNumber === 1) cell.alignment = { vertical: 'middle', horizontal: 'center' };
-      else if (colNumber === 2) cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
+      if (colNumber === 1)
+        cell.alignment = { vertical: 'middle', horizontal: 'center' };
+      else if (colNumber === 2)
+        cell.alignment = {
+          vertical: 'middle',
+          horizontal: 'left',
+          wrapText: true,
+        };
       else {
         cell.alignment = { vertical: 'middle', horizontal: 'right' };
-        if (typeof cell.value === 'number' && cell.value !== 0) cell.numFmt = '#,##0';
+        if (typeof cell.value === 'number' && cell.value !== 0)
+          cell.numFmt = '#,##0';
       }
     }
   }
@@ -318,7 +395,7 @@ export function formatDataRow(
 //         groupTotalRow.getCell(10).value = Number(gtGaz?.total_consumed_sum) || 0;
 //         groupTotalRow.getCell(11).value = Number(gtPropan?.total_consumed_amount) || 0;
 //         groupTotalRow.getCell(12).value = Number(gtPropan?.total_consumed_sum) || 0;
-        
+
 //         // Guruh umumiy summasi formula orqali: H + J + L
 //         groupTotalRow.getCell(13).value = { formula: `H${currentRowIndex}+J${currentRowIndex}+L${currentRowIndex}` };
 
@@ -357,7 +434,7 @@ export function formatDataRow(
 //     summaryRow.getCell(10).value = Number(grandGaz?.total_consumed_sum) || 0;
 //     summaryRow.getCell(11).value = Number(grandPropan?.total_consumed_amount) || 0;
 //     summaryRow.getCell(12).value = Number(grandPropan?.total_consumed_sum) || 0;
-    
+
 //     // Umumiy jami summasi ham formula orqali: H + J + L
 //     summaryRow.getCell(13).value = { formula: `H${currentRowIndex}+J${currentRowIndex}+L${currentRowIndex}` };
 

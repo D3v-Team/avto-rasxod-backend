@@ -10,19 +10,29 @@ export class QueryCarSparePartsExpenseDto {
   @Min(1)
   page?: number = 1;
 
-  @ApiProperty({ required: false, default: 15, description: 'Sahifadagi elementlar soni' })
+  @ApiProperty({
+    required: false,
+    default: 15,
+    description: 'Sahifadagi elementlar soni',
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
   limit?: number = 15;
 
-  @ApiProperty({ required: false, description: 'Mashina ID bo\'yicha filterlash' })
+  @ApiProperty({
+    required: false,
+    description: "Mashina ID bo'yicha filterlash",
+  })
   @IsOptional()
   @IsUUID('4')
   car_id?: string;
 
-  @ApiProperty({ required: false, description: 'Shu sanadan boshlab (YYYY-MM-DD)' })
+  @ApiProperty({
+    required: false,
+    description: 'Shu sanadan boshlab (YYYY-MM-DD)',
+  })
   @IsOptional()
   @IsString()
   date_from?: string;
@@ -32,12 +42,15 @@ export class QueryCarSparePartsExpenseDto {
   @IsString()
   date_to?: string;
 
-  @ApiProperty({ required: false, description: 'To\'lov turi bo\'yicha filterlash' })
+  @ApiProperty({
+    required: false,
+    description: "To'lov turi bo'yicha filterlash",
+  })
   @IsOptional()
   @IsString()
   payment_type?: string;
 
-  @ApiProperty({ required: false, description: 'Qidiruv (part_name bo\'yicha)' })
+  @ApiProperty({ required: false, description: "Qidiruv (part_name bo'yicha)" })
   @IsOptional()
   @IsString()
   search?: string;

@@ -9,6 +9,7 @@ import {
   IsNotEmpty,
   Min,
   MaxLength,
+  IsPositive,
 } from 'class-validator';
 import { Transform, Type } from 'class-transformer';
 
@@ -17,7 +18,9 @@ export class CreateCarDailyExpenseDto {
     description: 'Mashina ID kaliti',
     example: 'uuid',
   })
-  @IsUUID('4', { message: "Mashina ID si to'g'ri UUID formatida bo'lishi kerak" })
+  @IsUUID('4', {
+    message: "Mashina ID si to'g'ri UUID formatida bo'lishi kerak",
+  })
   @IsNotEmpty({ message: 'Mashina ID si kiritilishi shart' })
   car_id: string;
 
@@ -25,7 +28,9 @@ export class CreateCarDailyExpenseDto {
     description: "Yoqilg'i turi ID kaliti",
     example: 'uuid',
   })
-  @IsUUID('4', { message: "Yoqilg'i turi ID si to'g'ri UUID formatida bo'lishi kerak" })
+  @IsUUID('4', {
+    message: "Yoqilg'i turi ID si to'g'ri UUID formatida bo'lishi kerak",
+  })
   @IsNotEmpty({ message: "Yoqilg'i turi ID si kiritilishi shart" })
   fuel_id: string;
 
@@ -33,7 +38,10 @@ export class CreateCarDailyExpenseDto {
     description: 'Sana (YYYY-MM-DD)',
     example: '2024-01-15',
   })
-  @IsDateString({}, { message: "Sana to'g'ri formatda bo'lishi kerak (YYYY-MM-DD)" })
+  @IsDateString(
+    {},
+    { message: "Sana to'g'ri formatda bo'lishi kerak (YYYY-MM-DD)" },
+  )
   @IsNotEmpty({ message: 'Sana kiritilishi shart' })
   date: string;
 
@@ -50,7 +58,8 @@ export class CreateCarDailyExpenseDto {
 
   @ApiProperty({
     required: false,
-    description: "Agar bugun yoqilg'i quyilmagan bo'lsa, kiritmasa ham bo'ladi (0 deb qabul qilinadi)",
+    description:
+      "Agar bugun yoqilg'i quyilmagan bo'lsa, kiritmasa ham bo'ladi (0 deb qabul qilinadi)",
     example: 20,
     minimum: 0,
   })
@@ -60,6 +69,18 @@ export class CreateCarDailyExpenseDto {
   received_amount?: number;
 
   @ApiProperty({
+    required: false,
+    description:
+      "Shu xaridning aniq narxi (received_amount > 0 bo'lsa MAJBURIY)",
+    example: 15000,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({}, { message: "Yoqilg'i narxi raqam bo'lishi kerak" })
+  @IsPositive({ message: "Yoqilg'i narxi musbat son bo'lishi kerak" })
+  fuel_price_at_time?: number;
+
+  @ApiProperty({
     description: 'Bayram kuni',
     example: false,
     default: false,
@@ -67,8 +88,8 @@ export class CreateCarDailyExpenseDto {
   })
   @IsOptional()
   @Transform(({ value }) => {
-    if (value === 'true') return true;
-    if (value === 'false') return false;
+    if (value === true || value === 'true') return true;
+    if (value === false || value === 'false') return false;
     return false;
   })
   @IsBoolean({ message: "is_holiday true yoki false qiymatida bo'lishi kerak" })
@@ -82,6 +103,6 @@ export class CreateCarDailyExpenseDto {
   })
   @IsOptional()
   @IsString({ message: "Izoh matn ko'rinishida bo'lishi kerak" })
-  @MaxLength(500, { message: "Izoh 500 belgidan oshmasligi kerak" })
+  @MaxLength(500, { message: 'Izoh 500 belgidan oshmasligi kerak' })
   note?: string;
 }

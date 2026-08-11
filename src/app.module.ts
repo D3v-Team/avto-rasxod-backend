@@ -16,9 +16,9 @@ import { CarModule } from './cars/car.module';
 import { Car } from './cars/models/cars.models';
 import { Employee } from './employees/models/employee.model';
 import { CarFuelNormModule } from './car-fuel-norm/car-fuel-norm.module';
-import { CarDailyExpenseModule } from './car-daily-expense/car-daily-expense.module';
+import { CarDailyExpenseModule } from './car-fuel-daily-expense/car-fuel-daily-expense.module';
 import { CarFuelNorm } from './car-fuel-norm/models/car-fuel-norm.model';
-import { CarDailyExpense } from './car-daily-expense/models/car-daily-expense.model';
+import { CarDailyExpense } from './car-fuel-daily-expense/models/car-fuel-daily-expense.model';
 import { CarSparePartsExpenseModule } from './car-spare-parts-expense/car-spare-parts-expense.module';
 import { CarSparePartsExpense } from './car-spare-parts-expense/models/car-spare-parts-expense.model';
 import { CarFuelNormHistory } from './car-fuel-norm-history/models/car-fuel-norm-history.model';
@@ -48,7 +48,16 @@ import { CarFuelNormHistoryModule } from './car-fuel-norm-history/car-fuel-norm-
         username: config.get<string>('POSTGRES_USER'),
         password: config.get<string>('POSTGRES_PASSWORD'),
         database: config.get<string>('POSTGRES_DB'),
-        models: [User, Fuel, Car, Employee, CarFuelNorm, CarDailyExpense, CarSparePartsExpense, CarFuelNormHistory],
+        models: [
+          User,
+          Fuel,
+          Car,
+          Employee,
+          CarFuelNorm,
+          CarDailyExpense,
+          CarSparePartsExpense,
+          CarFuelNormHistory,
+        ],
         autoLoadModels: true,
         synchronize: true,
         sync: { alter: true },
@@ -70,7 +79,7 @@ import { CarFuelNormHistoryModule } from './car-fuel-norm-history/car-fuel-norm-
     CarFuelNormModule,
     CarDailyExpenseModule,
     CarSparePartsExpenseModule,
-    CarFuelNormHistoryModule
+    CarFuelNormHistoryModule,
   ],
   controllers: [],
   providers: [
@@ -80,4 +89,4 @@ import { CarFuelNormHistoryModule } from './car-fuel-norm-history/car-fuel-norm-
     },
   ],
 })
-export class AppModule { }
+export class AppModule {}

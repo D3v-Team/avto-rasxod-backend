@@ -44,7 +44,9 @@ export class QueryCarDailyExpenseDto {
     required: false,
   })
   @IsOptional()
-  @IsUUID('4', { message: "Mashina ID si to'g'ri UUID formatida bo'lishi kerak" })
+  @IsUUID('4', {
+    message: "Mashina ID si to'g'ri UUID formatida bo'lishi kerak",
+  })
   car_id?: string;
 
   @ApiProperty({
@@ -53,7 +55,9 @@ export class QueryCarDailyExpenseDto {
     required: false,
   })
   @IsOptional()
-  @IsUUID('4', { message: "Yoqilg'i turi ID si to'g'ri UUID formatida bo'lishi kerak" })
+  @IsUUID('4', {
+    message: "Yoqilg'i turi ID si to'g'ri UUID formatida bo'lishi kerak",
+  })
   fuel_id?: string;
 
   @ApiProperty({
@@ -62,7 +66,13 @@ export class QueryCarDailyExpenseDto {
     required: false,
   })
   @IsOptional()
-  @IsDateString({}, { message: "Boshlang'ich sana to'g'ri sana formatida bo'lishi kerak (YYYY-MM-DD)" })
+  @IsDateString(
+    {},
+    {
+      message:
+        "Boshlang'ich sana to'g'ri sana formatida bo'lishi kerak (YYYY-MM-DD)",
+    },
+  )
   date_from?: string;
 
   @ApiProperty({
@@ -71,7 +81,13 @@ export class QueryCarDailyExpenseDto {
     required: false,
   })
   @IsOptional()
-  @IsDateString({}, { message: "Yakuniy sana to'g'ri sana formatida bo'lishi kerak (YYYY-MM-DD)" })
+  @IsDateString(
+    {},
+    {
+      message:
+        "Yakuniy sana to'g'ri sana formatida bo'lishi kerak (YYYY-MM-DD)",
+    },
+  )
   date_to?: string;
 
   @IsOptional()
@@ -106,7 +122,8 @@ export class QueryCarDailyExpenseDto {
   @IsOptional()
   @IsString({ message: "Saralash ustuni matn ko'rinishida bo'lishi kerak" })
   @IsIn(['date', 'sequence_no', 'mileage', 'fuel_expence', 'balance_after'], {
-    message: "Saralash ustuni quyidagilardan biri bo'lishi kerak: date, sequence_no, mileage, fuel_expence, balance_after",
+    message:
+      "Saralash ustuni quyidagilardan biri bo'lishi kerak: date, sequence_no, mileage, fuel_expence, balance_after",
   })
   sortBy?: string = 'date';
 

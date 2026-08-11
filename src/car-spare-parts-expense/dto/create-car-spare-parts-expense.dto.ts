@@ -14,11 +14,11 @@ export class CreateCarSparePartsExpenseDto {
     description: 'Mashina ID kaliti',
     example: 'uuid',
   })
-  @IsUUID('4', { message: "Mashina ID si to'g'ri UUID formatida bo'lishi kerak" })
+  @IsUUID('4', {
+    message: "Mashina ID si to'g'ri UUID formatida bo'lishi kerak",
+  })
   @IsNotEmpty({ message: 'Mashina ID si kiritilishi shart' })
   car_id: string;
-
- 
 
   @ApiProperty({
     description: 'Ehtiyot qism nomi',
@@ -41,7 +41,7 @@ export class CreateCarSparePartsExpenseDto {
     example: 4,
   })
   @IsNumber({}, { message: "Miqdori raqam bo'lishi kerak" })
-  @IsPositive({ message: 'Miqdori musbat son bo\'lishi kerak' })
+  @IsPositive({ message: "Miqdori musbat son bo'lishi kerak" })
   @IsNotEmpty({ message: 'Miqdori kiritilishi shart' })
   quantity: number;
 
@@ -58,7 +58,7 @@ export class CreateCarSparePartsExpenseDto {
     example: 50000,
   })
   @IsNumber({}, { message: "Narxi raqam bo'lishi kerak" })
-  @IsPositive({ message: 'Narxi musbat son bo\'lishi kerak' })
+  @IsPositive({ message: "Narxi musbat son bo'lishi kerak" })
   @IsNotEmpty({ message: 'Narxi kiritilishi shart' })
   price: number;
 
@@ -67,13 +67,13 @@ export class CreateCarSparePartsExpenseDto {
     example: 200000,
   })
   @IsNumber({}, { message: "Umumiy narxi raqam bo'lishi kerak" })
-  @IsPositive({ message: 'Umumiy narxi musbat son bo\'lishi kerak' })
+  @IsPositive({ message: "Umumiy narxi musbat son bo'lishi kerak" })
   @IsNotEmpty({ message: 'Umumiy narxi kiritilishi shart' })
   total_price: number;
 
   @ApiProperty({
     description: 'Izoh',
-    example: 'Qo\'shimcha izoh',
+    example: "Qo'shimcha izoh",
     required: false,
   })
   @IsOptional()
@@ -84,7 +84,10 @@ export class CreateCarSparePartsExpenseDto {
     description: 'Xarajat sanasi (YYYY-MM-DD)',
     example: '2026-07-27',
   })
-  @IsDateString({}, { message: "Sana to'g'ri formatda bo'lishi kerak (YYYY-MM-DD)" })
+  @IsDateString(
+    {},
+    { message: "Sana to'g'ri formatda bo'lishi kerak (YYYY-MM-DD)" },
+  )
   @IsNotEmpty({ message: 'Sana kiritilishi shart' })
   date: string;
 }

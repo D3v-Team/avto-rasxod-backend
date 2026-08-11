@@ -99,7 +99,10 @@ export class CarFuelNormController {
   }
 
   @Patch(':id/correct-initial-balance')
-  @ApiOperation({ summary: "Yoqilg'i normasining boshlang'ich qoldig'ini tuzatish (butun zanjir qayta hisoblanadi)" })
+  @ApiOperation({
+    summary:
+      "Yoqilg'i normasining boshlang'ich qoldig'ini tuzatish (butun zanjir qayta hisoblanadi)",
+  })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
   correctInitialBalance(
     @Param('id', ParseUUIDPipe) id: string,
@@ -108,11 +111,14 @@ export class CarFuelNormController {
     return this.carFuelNormService.correctInitialBalance(id, dto);
   }
 
-  @ApiOperation({ summary: 'Norma miqdorini yoki yoqilg\'i narxini sanaga bog\'liq holda o\'zgartirish' })
+  @ApiOperation({
+    summary:
+      "Norma miqdorini yoki yoqilg'i narxini sanaga bog'liq holda o'zgartirish",
+  })
   @ApiResponse({ status: 200, description: 'Tarix muvaffaqiyatli yangilandi' })
   @ApiResponse({ status: 404, description: 'Norma topilmadi' })
-  @ApiResponse({ status: 400, description: 'Xato so\'rov' })
-  @ApiResponse({ status: 401, description: 'Ruxsat yo\'q' })
+  @ApiResponse({ status: 400, description: "Xato so'rov" })
+  @ApiResponse({ status: 401, description: "Ruxsat yo'q" })
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
   @Patch(':id/history')
   async updateHistory(
@@ -134,7 +140,7 @@ export class CarFuelNormController {
       if (error instanceof HttpException) throw error;
       console.error('CarFuelNorm history update error:', error);
       throw new InternalServerErrorException(
-        "Norma tarixini yangilashda xatolik yuz berdi",
+        'Norma tarixini yangilashda xatolik yuz berdi',
       );
     }
   }
