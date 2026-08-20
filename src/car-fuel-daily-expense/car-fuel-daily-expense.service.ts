@@ -1937,10 +1937,26 @@ export class CarDailyExpenseService {
             totalExpence += Number(r.fuel_expence) || 0;
           });
         } else {
-          const norm = await this.carFuelNormRepo.findOne({
-            where: { car_id, fuel_id: fuel.id },
+          const previousRecord = await this.expenseRepo.findOne({
+            where: {
+              car_id,
+              fuel_id: fuel.id,
+              date: { [Op.lt]: startDate },
+            },
+            order: [
+              ['date', 'DESC'],
+              ['sequence_no', 'DESC'],
+            ],
           });
-          startBalance = norm ? Number(norm.current_balance) || 0 : 0;
+
+          if (previousRecord) {
+            startBalance = Number(previousRecord.balance_after) || 0;
+          } else {
+            const norm = await this.carFuelNormRepo.findOne({
+              where: { car_id, fuel_id: fuel.id },
+            });
+            startBalance = norm ? Number(norm.initial_balance) || 0 : 0;
+          }
           endBalance = startBalance;
         }
 
@@ -2010,7 +2026,6 @@ export class CarDailyExpenseService {
       transaction: t,
       lock: t.LOCK.UPDATE,
     });
-
     const car = await this.carRepo.findByPk(carId, {
       transaction: t,
       lock: t.LOCK.UPDATE,
